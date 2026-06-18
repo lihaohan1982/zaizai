@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:location_chat_app/core/network/dio_client.dart';
+import 'package:location_chat_app/core/providers.dart';
 import 'package:location_chat_app/core/security/geo_encryption_service.dart';
 
 /// 位置数据仓库 - 负责将加密后的位置数据发送给后端
@@ -57,7 +57,7 @@ class LocationRepository {
 /// Provider: 提供 LocationRepository 单例
 final locationRepositoryProvider = Provider<LocationRepository>((ref) {
   return LocationRepository(
-    dio: DioClient().dio,
+    dio: ref.read(dioClientProvider).dio,
     // ✅ ProdGeoEncryptionService（AES-256-GCM，密钥存 Keychain/Keystore）
     // DevGeoEncryptionService 已禁用：encrypt/decrypt 均抛异常
     encryptionService: ProdGeoEncryptionService(),

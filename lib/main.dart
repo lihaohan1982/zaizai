@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
+import 'core/config/env_config.dart';
 import 'core/privacy/privacy_fuse_controller.dart';
 import 'core/providers.dart';
 import 'features/chat/pages/interaction_sheet.dart';
@@ -13,6 +14,7 @@ import 'demo/location_demo.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
+  await EnvConfig.load();
 
   runApp(const ProviderScope(child: MyApp()));
 }

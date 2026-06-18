@@ -7,8 +7,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
 import 'auth/auth_state.dart';
+import 'auth/secure_token_storage.dart';
+import 'auth/token_storage.dart';
 import 'config/app_config.dart';
 import 'geofence/geofence_state_machine.dart';
+import 'network/dio_client.dart';
 import 'location/map_markers_notifier.dart';
 import 'messaging/offline_message_store_impl.dart';
 import 'messaging/quick_message_service.dart';
@@ -44,6 +47,19 @@ final privacyBoxProvider = FutureProvider<Box<dynamic>>((ref) async {
 /// AuthState 单例
 final authStateProvider = Provider<AuthState>((ref) {
   return AuthState();
+});
+
+/// Token 存储（生产环境使用 FlutterSecureStorage）
+final tokenStorageProvider = Provider<TokenStorage>((ref) {
+  return const SecureTokenStorage();
+});
+
+/// Dio 客户端（依赖注入 TokenStorage + 环境变量 baseUrl）
+final dioClientProvider = Provider<DioClient>((ref) {
+  return DioClient(
+    baseUrl: AppConfig.apiBaseUrl,
+    tokenStorage: ref.read(tokenStorageProvider),
+  );
 });
 
 // -------------------------------------------------------------------------

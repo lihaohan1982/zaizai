@@ -1,22 +1,24 @@
-// lib/core/config/app_config.dart
+import 'env_config.dart';
+
 /// 应用全局配置
+///
+/// 阶段三安全整改：
+///   - 服务端地址全部下沉到 .env，由 [EnvConfig] 统一加载与校验
+///   - 本类保留运行时无关的静态常量，避免直接硬编码 URL
 class AppConfig {
   AppConfig._();
 
   // -------------------------------------------------------------------------
-  // 服务端
+  // 服务端（从环境变量读取）
   // -------------------------------------------------------------------------
-  static const String apiBaseUrl = 'http://localhost:3001/api';
-  static const String wsBaseUrl = 'ws://localhost:3001';
+  static String get apiBaseUrl => EnvConfig.apiBaseUrl;
+  static String get wsBaseUrl => EnvConfig.wsBaseUrl;
 
   // -------------------------------------------------------------------------
   // 高德地图（AMap）
   // -------------------------------------------------------------------------
   /// ⚠️ 需替换为真实 Key（Android 真机调试必须）
-  static const String amapApiKey = String.fromEnvironment(
-    'AMAP_API_KEY',
-    defaultValue: 'YOUR_AMAP_API_KEY_HERE',
-  );
+  static String get amapApiKey => EnvConfig.amapApiKey;
 
   // -------------------------------------------------------------------------
   // 隐私与安全

@@ -162,16 +162,3 @@ class MapMarkersNotifier extends StateNotifier<Map<String, MarkerData>> {
   }
 }
 
-/// Provider 定义
-final wsClientProvider = Provider<WsClient>((ref) {
-  // TODO: 从配置或环境变量获取
-  return WsClient(
-    baseUrl: 'ws://localhost:3001',
-    token: '', // TODO: 从 AuthProvider 获取
-  );
-});
-
-final mapMarkersProvider = StateNotifierProvider<MapMarkersNotifier, Map<String, MarkerData>>((ref) {
-  final wsClient = ref.watch(wsClientProvider);
-  return MapMarkersNotifier(wsClient);
-});

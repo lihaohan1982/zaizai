@@ -1,30 +1,42 @@
 import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 
-/// Dio 客户端单例 - 全局网络请求实例
+import '../auth/token_storage.dart';
+
+/// Dio 客户端 — 依赖注入版本
+///
+/// 阶段三安全整改：
+///   - 不再使用 SharedPreferences 明文存储 Token
+///   - 构造时注入 [TokenStorage]，每次请求从安全存储动态读取 Token
+///   - baseUrl 由调用方提供（来自 EnvConfig / AppConfig）
 class DioClient {
-  static final DioClient _instance = DioClient._internal();
-  factory DioClient() => _instance;
+  final Dio dio;
+  final TokenStorage _tokenStorage;
 
-  late final Dio dio;
-
-  DioClient._internal() {
-    dio = Dio(BaseOptions(
-      baseUrl: 'http://localhost:3001/api',
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 10),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    ));
-
-    // 添加 Token 拦截器
+  DioClient({
+    required String baseUrl,
+    required TokenStorage tokenStorage,
+    Duration connectTimeout = const Duration(seconds: 10),
+    Duration receiveTimeout = const Duration(seconds: 10),
+  })  : _tokenStorage = tokenStorage,
+        dio = Dio(BaseOptions(
+          baseUrl: baseUrl,
+          connectTimeout: connectTimeout,
+          receiveTimeout: receiveTimeout,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        )) {
+    // 添加 Token 拦截器：每次请求动态从安全存储读取
     dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        final prefs = await SharedPreferences.getInstance();
-        final token = prefs.getString('auth_token');
-        if (token != null) {
-          options.headers['Authorization'] = 'Bearer $token';
+        try {
+          final token = await _tokenStorage.readToken();
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+        } catch (e) {
+          debugPrint('[DioClient] 读取 Token 失败: $e');
         }
         handler.next(options);
       },

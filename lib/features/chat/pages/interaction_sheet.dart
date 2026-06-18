@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:location_chat_app/core/config/app_config.dart';
 import 'package:location_chat_app/core/messaging/message_payload.dart';
-import 'package:location_chat_app/core/network/dio_client.dart';
 import 'package:location_chat_app/core/providers.dart';
 import 'package:location_chat_app/core/privacy/privacy_fuse_controller.dart';
 import 'package:location_chat_app/features/chat/controllers/chat_interaction_controller.dart';
@@ -70,7 +69,7 @@ class _InteractionSheetState extends ConsumerState<InteractionSheet> {
           quickMessageService: service,
           wsClient: ref.read(wsClientProvider),
           authState: ref.read(authStateProvider),
-          dioClient: DioClient(),
+          dioClient: ref.read(dioClientProvider),
         );
 
         final isPaused = privacyAsync.maybeWhen(

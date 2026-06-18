@@ -49,7 +49,10 @@ class WsClient {
     this.maxReconnectAttempts = 10,
   });
 
-  /// 建立连接
+  /// 建立连接，并在连接成功后发送首帧鉴权消息
+  ///
+  /// 阶段三安全整改：除 URL 查询参数 token 外，连接建立后立即发送
+  /// `{type: 'auth', token: ...}` 首帧，供后端优先采用首帧鉴权。
   void connect() {
     _intentionalClose = false;
     _doConnect();
@@ -76,9 +79,23 @@ class WsClient {
       _startHeartbeat();
       _reconnectAttempts = 0;
       _onConnected.add(null);
+
+      // 首帧鉴权：连接建立后立即发送 token
+      if (token.isNotEmpty) {
+        _sendAuthFrame();
+      }
     } catch (e) {
       _onError.add(e);
       _scheduleReconnect();
+    }
+  }
+
+  void _sendAuthFrame() {
+    try {
+      final authFrame = json.encode({'type': 'auth', 'token': token});
+      _channel?.sink.add(authFrame);
+    } catch (e) {
+      _onError.add(e);
     }
   }
 
