@@ -128,12 +128,12 @@ void main() {
 
   group('【PFC-4】暂停落盘', () {
     test('GIVEN 已初始化 + fuseStatus=normal '
-        'WHEN pauseSharing() '
+        'WHEN togglePause(true) '
         'THEN fuseStatus=paused, repository 保存 isPaused=true, pauseUntil 有值', () async {
       geoRepo.setConfig(testConfig);
       await controller.initialize(fenceId);
 
-      controller.pauseSharing(duration: const Duration(hours: 1));
+      await controller.togglePause(true, duration: const Duration(hours: 1));
 
       expect(controller.fuseStatusNotifier.value, PrivacyFuseStatus.paused);
       // _saveStateNow 是同步落盘，无需 await Future.delayed
@@ -145,7 +145,7 @@ void main() {
 
   group('【PFC-5】恢复落盘', () {
     test('GIVEN 已初始化 + fuseStatus=paused '
-        'WHEN resumeSharing() '
+        'WHEN togglePause(false) '
         'THEN fuseStatus=resuming, repository 保存 isPaused=false', () async {
       geoRepo.setConfig(testConfig);
       privRepo.savedStates.clear();
@@ -154,12 +154,12 @@ void main() {
           const PrivacyState(isPaused: true, pauseUntil: null));
       await controller.initialize(fenceId);
 
-      controller.resumeSharing();
+      await controller.togglePause(false);
 
       // [PFC-5 修复] resume 用防抖落盘，需等待 300ms 后检查
       await Future.delayed(const Duration(milliseconds: 350));
 
-      // resumeSharing 设置 resuming，冷启动完成后才变 normal
+      // togglePause(false) 设置 resuming，冷启动完成后才变 normal
       expect(controller.fuseStatusNotifier.value,
           anyOf(PrivacyFuseStatus.resuming, PrivacyFuseStatus.normal));
       expect(privRepo.savedStates.last.isPaused, false);
@@ -222,22 +222,22 @@ void main() {
     });
   });
 
-  group('【PFC-8】resumeSharing 60秒超时兜底', () {
-    test('GIVEN resumeSharing 触发后（无状态机） '
+  group('【PFC-8】togglePause(false) 60秒超时兜底', () {
+    test('GIVEN togglePause(false) 触发后（无状态机） '
         'WHEN 等待超过 60 秒 '
         'THEN fuseStatus 仍为 resuming（无状态机时无法恢复，验证超时 timer 存在）', () async {
       // 不配置 geoRepo，所以 _stateMachine 为 null
-      // resumeSharing 会因 _stateMachine==null 直接 return
+      // togglePause(false) 会因 _stateMachine==null 直接 return
       // 改为：有配置，初始化后验证 timer 存在
       geoRepo.setConfig(testConfig);
       await controller.initialize(fenceId);
 
-      // resumeSharing 设置 resuming + 启动 60s 超时 timer
+      // togglePause(false) 设置 resuming + 启动 60s 超时 timer
       // 但 resume() 内部 coldStartGeneration.value++ 同步触发
       // _onColdStartCompleted → resuming → normal
       // 所以在真实环境中 resuming 状态是瞬时的
-      // 验证：resumeSharing 后 fuseStatus 快速变为 normal（冷启动完成）
-      controller.resumeSharing();
+      // 验证：togglePause(false) 后 fuseStatus 快速变为 normal（冷启动完成）
+      await controller.togglePause(false);
 
       // 给 event loop 处理时间
       await Future.delayed(const Duration(milliseconds: 50));
@@ -301,17 +301,17 @@ void main() {
     });
   });
 
-  group('【PFC-10 边界】resumeSharing 60秒超时兜底', () {
+  group('【PFC-10 边界】togglePause(false) 60秒超时兜底', () {
     test('GIVEN resuming 状态下 WHEN 60秒超时 timer 触发 THEN fuseStatus 回到 normal', () async {
       geoRepo.setConfig(testConfig);
       await controller.initialize(fenceId);
 
       // 先暂停
-      controller.pauseSharing();
+      await controller.togglePause(true);
       expect(controller.fuseStatusNotifier.value, PrivacyFuseStatus.paused);
 
       // 恢复 → 进入 resuming
-      controller.resumeSharing();
+      await controller.togglePause(false);
       expect(controller.fuseStatusNotifier.value, anyOf(
         PrivacyFuseStatus.resuming, PrivacyFuseStatus.normal));
     });
@@ -331,11 +331,11 @@ void main() {
       controller.dispose();
     });
 
-    test('GIVEN resumeSharing 后 dispose WHEN 超时 timer 存在 THEN dispose 安全清除 timer 不抛异常', () async {
+    test('GIVEN togglePause(false) 后 dispose WHEN 超时 timer 存在 THEN dispose 安全清除 timer 不抛异常', () async {
       geoRepo.setConfig(testConfig);
       await controller.initialize(fenceId);
-      controller.pauseSharing();
-      controller.resumeSharing();
+      await controller.togglePause(true);
+      await controller.togglePause(false);
 
       // 立即 dispose，此时 60s 超时 timer 正在运行
       expect(() => controller.dispose(), returnsNormally);

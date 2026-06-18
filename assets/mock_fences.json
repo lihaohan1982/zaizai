@@ -1,0 +1,16 @@
+[
+  {
+    "fenceId": "home",
+    "name": "家",
+    "lat": 31.2304,
+    "lng": 121.4737,
+    "radius": 200
+  },
+  {
+    "fenceId": "office",
+    "name": "公司",
+    "lat": 31.2456,
+    "lng": 121.4873,
+    "radius": 150
+  }
+]

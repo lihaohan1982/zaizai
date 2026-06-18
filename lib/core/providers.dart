@@ -1,5 +1,8 @@
 // lib/core/providers.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive/hive.dart';
 
@@ -76,20 +79,11 @@ final privacyFuseControllerProvider = FutureProvider<PrivacyFuseController>((ref
   return PrivacyFuseController(geofenceRepo, privacyRepo);
 });
 
-/// 围栏列表 Provider（供 BuddyStatusCard 使用）
+/// 围栏列表 Provider（供 BuddyStatusCard / ChatInteractionController 使用）
 final fencesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
-  final repo = await ref.watch(geofenceRepositoryProvider.future);
-  final config = await repo.loadConfig('home') ?? await repo.loadConfig('office');
-  if (config == null) return [];
-  return [
-    {
-      'fenceId': config.fenceId,
-      'name': config.fenceId == 'home' ? '家' : '公司',
-      'lat': config.centerLat,
-      'lng': config.centerLon,
-      'radius': config.radiusMeters,
-    },
-  ];
+  final jsonString = await rootBundle.loadString('assets/mock_fences.json');
+  final List<dynamic> json = jsonDecode(jsonString);
+  return json.cast<Map<String, dynamic>>();
 });
 
 // -------------------------------------------------------------------------
@@ -122,18 +116,14 @@ final scaffoldMessengerKeyProvider = Provider<GlobalKey<ScaffoldMessengerState>>
 // Friend List
 // -------------------------------------------------------------------------
 
-/// 好友列表 Provider（从后端 API 获取）
+/// 好友列表 Provider（从 assets  mock 数据读取，MVP 阶段展示真实数据结构）
 final friendListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final auth = ref.watch(authStateProvider);
   if (!auth.isLoggedIn) return [];
 
-  // TODO: 替换为真实 DioClient 调用
-  // final dio = DioClient().dio;
-  // final response = await dio.get('/friends/list');
-  // return (response.data['data'] as List).map((e) => e as Map<String, dynamic>).toList();
-
-  // MVP 阶段：返回空列表，等后端好友 API 就绪后替换
-  return <Map<String, dynamic>>[];
+  final jsonString = await rootBundle.loadString('assets/mock_friends.json');
+  final List<dynamic> json = jsonDecode(jsonString);
+  return json.cast<Map<String, dynamic>>();
 });
 
 // -------------------------------------------------------------------------

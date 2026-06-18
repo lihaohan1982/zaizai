@@ -185,11 +185,11 @@ class PrivacyFuseController {
     final previousPaused = _isPaused;
     final previousStatus = fuseStatusNotifier.value;
 
-    // 1. 乐观更新 UI
+    // 1. 乐观更新 UI 与持久化
     if (val) {
-      pauseSharing(duration: duration);
+      _pauseSharing(duration: duration);
     } else {
-      resumeSharing();
+      _resumeSharing();
     }
 
     // 2. 发起后端请求
@@ -198,7 +198,7 @@ class PrivacyFuseController {
       // await _dio.post('/api/privacy/${val ? 'pause' : 'resume'}');
       debugPrint('API: POST /api/privacy/${val ? 'pause' : 'resume'}');
     } catch (e) {
-      // 3. 请求失败：状态回滚
+      // 3. 请求失败：内存状态回滚
       _isPaused = previousPaused;
       fuseStatusNotifier.value = previousStatus;
       if (previousPaused) {
@@ -206,19 +206,18 @@ class PrivacyFuseController {
       } else {
         _stateMachine?.resume();
       }
-      fuseStatusNotifier.value = previousStatus;
 
-      // 4. 弹出错误提示
-      final ctx = messengerKey?.currentContext;
-      if (ctx != null) {
-        ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('操作失败，请重试')),
-        );
-      }
+      // 4. 同步回滚持久化存储，确保重启后状态一致
+      await _saveStateNow(PrivacyState(isPaused: previousPaused));
+
+      // 5. 弹出错误提示（使用 GlobalKey.currentState，避免 async gap 后持有 BuildContext）
+      messengerKey?.currentState?.showSnackBar(
+        const SnackBar(content: Text('操作失败，请重试')),
+      );
     }
   }
 
-  void pauseSharing({Duration? duration}) {
+  void _pauseSharing({Duration? duration}) {
     if (_stateMachine == null) return;
     _isPaused = true;
     _stateMachine!.suspend();
@@ -234,7 +233,7 @@ class PrivacyFuseController {
     debugPrint('API: POST /api/privacy/pause, duration: $duration');
   }
 
-  void resumeSharing() {
+  void _resumeSharing() {
     if (_stateMachine == null) return;
     // [V5.3.2 竞态修复] 必须先设置 resuming 状态，再触发底层 resume
     fuseStatusNotifier.value = PrivacyFuseStatus.resuming;

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "friend-1",
+    "name": "Alice",
+    "avatarUrl": "https://i.pravatar.cc/150?u=alice",
+    "locationDesc": "家",
+    "battery": 85
+  },
+  {
+    "id": "friend-2",
+    "name": "Bob",
+    "avatarUrl": "https://i.pravatar.cc/150?u=bob",
+    "locationDesc": "公司",
+    "battery": 62
+  },
+  {
+    "id": "friend-3",
+    "name": "Carol",
+    "avatarUrl": "https://i.pravatar.cc/150?u=carol",
+    "battery": 30
+  }
+]

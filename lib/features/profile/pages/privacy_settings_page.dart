@@ -50,11 +50,8 @@ class PrivacySettingsPage extends ConsumerWidget {
                   trailing: Switch(
                     value: !isPaused,
                     onChanged: (value) {
-                      if (value) {
-                        controller.resumeSharing();
-                      } else {
-                        controller.pauseSharing();
-                      }
+                      // 统一走 togglePause，失败会自动回滚内存+持久化状态
+                      controller.togglePause(!value);
                     },
                   ),
                 ),
