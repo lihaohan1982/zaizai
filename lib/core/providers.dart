@@ -1,0 +1,227 @@
+// lib/core/providers.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:hive/hive.dart';
+
+import 'auth/auth_state.dart';
+import 'config/app_config.dart';
+import 'geofence/geofence_state_machine.dart';
+import 'location/map_markers_notifier.dart';
+import 'messaging/offline_message_store_impl.dart';
+import 'messaging/quick_message_service.dart';
+import 'network/websocket_service.dart';
+import 'network/ws_client.dart';
+import 'privacy/privacy_fuse_controller.dart';
+import 'repositories/geofence_repository.dart';
+import 'repositories/privacy_state_repository.dart';
+import 'security/geo_encryption_service.dart';
+
+// -------------------------------------------------------------------------
+// Hive Box Providers
+// -------------------------------------------------------------------------
+
+final geofenceBoxProvider = FutureProvider<Box<dynamic>>((ref) async {
+  if (!Hive.isBoxOpen('geofence_configs')) {
+    await Hive.openBox<dynamic>('geofence_configs');
+  }
+  return Hive.box<dynamic>('geofence_configs');
+});
+
+final privacyBoxProvider = FutureProvider<Box<dynamic>>((ref) async {
+  if (!Hive.isBoxOpen('privacy_state')) {
+    await Hive.openBox<dynamic>('privacy_state');
+  }
+  return Hive.box<dynamic>('privacy_state');
+});
+
+// -------------------------------------------------------------------------
+// Auth
+// -------------------------------------------------------------------------
+
+/// AuthState 单例
+final authStateProvider = Provider<AuthState>((ref) {
+  return AuthState();
+});
+
+// -------------------------------------------------------------------------
+// Encryption
+// -------------------------------------------------------------------------
+
+final geoEncryptionServiceProvider = Provider<GeoEncryptionService>((ref) {
+  return ProdGeoEncryptionService();
+});
+
+// -------------------------------------------------------------------------
+// Repositories
+// -------------------------------------------------------------------------
+
+final geofenceRepositoryProvider = FutureProvider<GeofenceRepository>((ref) async {
+  final box = await ref.watch(geofenceBoxProvider.future);
+  final encryption = ref.watch(geoEncryptionServiceProvider);
+  return LocalGeofenceRepository(box, encryption);
+});
+
+final privacyStateRepositoryProvider = FutureProvider<PrivacyStateRepository>((ref) async {
+  final box = await ref.watch(privacyBoxProvider.future);
+  return LocalPrivacyStateRepository(box);
+});
+
+// -------------------------------------------------------------------------
+// Privacy & Geofence
+// -------------------------------------------------------------------------
+
+final privacyFuseControllerProvider = FutureProvider<PrivacyFuseController>((ref) async {
+  final geofenceRepo = await ref.watch(geofenceRepositoryProvider.future);
+  final privacyRepo = await ref.watch(privacyStateRepositoryProvider.future);
+  return PrivacyFuseController(geofenceRepo, privacyRepo);
+});
+
+/// 围栏列表 Provider（供 BuddyStatusCard 使用）
+final fencesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final repo = await ref.watch(geofenceRepositoryProvider.future);
+  final config = await repo.loadConfig('home') ?? await repo.loadConfig('office');
+  if (config == null) return [];
+  return [
+    {
+      'fenceId': config.fenceId,
+      'name': config.fenceId == 'home' ? '家' : '公司',
+      'lat': config.centerLat,
+      'lng': config.centerLon,
+      'radius': config.radiusMeters,
+    },
+  ];
+});
+
+// -------------------------------------------------------------------------
+// 围栏事件历史 Provider（供 FenceEventHistoryPage 使用）
+// -------------------------------------------------------------------------
+
+/// 获取指定围栏的事件历史列表
+///
+/// 后端接口：GET /api/fences/:fenceId/events
+/// 返回字段：[{"event_type": "enter"|"exit", "timestamp": "ISO8601", ...}]
+final fenceEventsProvider = FutureProvider.family<List<Map<String, dynamic>>, String>(
+  (ref, fenceId) async {
+    // TODO: 替换为真实后端 API 调用
+    // final dio = DioClient().dio;
+    // final response = await dio.get('/api/fences/$fenceId/events');
+    // return List<Map<String, dynamic>>.from(response.data);
+    return [];
+  },
+);
+
+// -------------------------------------------------------------------------
+// ScaffoldMessenger Key（供 ChatInteractionController Toast 显示）
+// -------------------------------------------------------------------------
+
+final scaffoldMessengerKeyProvider = Provider<GlobalKey<ScaffoldMessengerState>>((ref) {
+  return GlobalKey<ScaffoldMessengerState>();
+});
+
+// -------------------------------------------------------------------------
+// Friend List
+// -------------------------------------------------------------------------
+
+/// 好友列表 Provider（从后端 API 获取）
+final friendListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final auth = ref.watch(authStateProvider);
+  if (!auth.isLoggedIn) return [];
+
+  // TODO: 替换为真实 DioClient 调用
+  // final dio = DioClient().dio;
+  // final response = await dio.get('/friends/list');
+  // return (response.data['data'] as List).map((e) => e as Map<String, dynamic>).toList();
+
+  // MVP 阶段：返回空列表，等后端好友 API 就绪后替换
+  return <Map<String, dynamic>>[];
+});
+
+// -------------------------------------------------------------------------
+// WebSocket
+// -------------------------------------------------------------------------
+
+/// WsClient 单例（依赖 AuthState token）
+final wsClientProvider = Provider<WsClient>((ref) {
+  final auth = ref.watch(authStateProvider);
+  final client = WsClient(
+    baseUrl: AppConfig.wsBaseUrl,
+    token: auth.token ?? '',
+    heartbeatInterval: const Duration(seconds: 30),
+    pongTimeout: const Duration(seconds: 40),
+  );
+  client.connect();
+  return client;
+});
+
+
+// -------------------------------------------------------------------------
+// QuickMessageService（按好友隔离，family provider）
+// -------------------------------------------------------------------------
+
+final quickMessageServiceProvider = FutureProvider.family<QuickMessageService, String>(
+  (ref, friendId) async {
+    final privacy = await ref.watch(privacyFuseControllerProvider.future);
+    final wsClient = ref.watch(wsClientProvider);
+    final encryption = ref.watch(geoEncryptionServiceProvider);
+
+    // 构造占位 StateMachine（围栏事件由后端推送触发，前端监听隐私联动）
+    final stateMachine = _buildPlaceholderStateMachine(friendId, encryption);
+
+    final offlineStore = InMemoryOfflineMessageStore();
+
+    // MapMarkersNotifier 需要 WsClient 构造，延迟到此处创建
+    final markers = MapMarkersNotifier(wsClient);
+
+    final service = QuickMessageService(
+      privacy,
+      stateMachine,
+      _WsServiceAdapter(wsClient),
+      offlineStore,
+      RealUuidProvider(),
+      RealTimeProvider(),
+      friendId,
+      markersNotifier: markers,
+    );
+    service.initialize();
+    return service;
+  },
+);
+
+/// 构建占位 GeofenceStateMachine（使用默认坐标，围栏事件由后端推送）
+GeofenceStateMachine _buildPlaceholderStateMachine(
+  String fenceId,
+  GeoEncryptionService encryption,
+) {
+  // 默认围栏中心（北京），真实数据由后端推送更新
+  const defaultLat = 39.9042;
+  const defaultLon = 116.4074;
+
+  return GeofenceStateMachine(
+    fenceId: fenceId,
+    centerLat: defaultLat,
+    centerLon: defaultLon,
+    radiusMeters: 200,
+    onStatusChanged: (_, __) {},
+  );
+}
+
+/// WsClient → WebSocketService 适配器
+class _WsServiceAdapter implements WebSocketService {
+  final WsClient _client;
+  _WsServiceAdapter(this._client);
+
+  @override
+  bool get isConnected => _client.isConnected;
+
+  @override
+  Stream<Map<String, dynamic>> get onMessage => _client.onQuickMessage;
+
+  // WebSocketService 接口实现（connect/disconnect/send 已在 WsClient 直接可用）
+  @override
+  Future<void> connect(String token) async => _client.connect();
+  @override
+  void disconnect() => _client.disconnect();
+  @override
+  Future<void> send(String event, Map<String, dynamic> payload) async =>
+      _client.send({'type': event, ...payload});
+}
