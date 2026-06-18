@@ -9,6 +9,14 @@
         android:label="location_chat_app"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- 高德地图 API Key -->
+        <meta-data
+            android:name="com.amap.api.v2.apikey"
+            android:value="13bffa45068fd901bea739f49a414ed7" />
+
+        <!-- 高德定位服务 -->
+        <service android:name="com.amap.api.location.APSService" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

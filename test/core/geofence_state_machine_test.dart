@@ -425,6 +425,55 @@ void main() {
 
   // ─── dispose 安全 ─────────────────────────────────────
 
+  // ─── 边界测试：pauseSharing 后立即 dispose ─────────────────────────────
+
+  group('【边界】pauseSharing 后立即调用 dispose', () {
+    test('suspend 后立即 dispose 不抛异常', () {
+      final t = FakeTimeProvider();
+      final m = GeofenceStateMachine(
+        fenceId: 'home', centerLat: _fenceLat, centerLon: _fenceLon,
+        radiusMeters: _fenceRadius, timeProvider: t,
+      );
+      _coldStartInside(m, t);
+      expect(m.statusNotifier.value, GeofenceStatus.inside);
+
+      // suspend 后立即 dispose
+      m.suspend();
+      expect(() => m.dispose(), returnsNormally);
+    });
+
+    test('suspend → resume → suspend 后连续 dispose 不抛异常', () {
+      final t = FakeTimeProvider();
+      final m = GeofenceStateMachine(
+        fenceId: 'home', centerLat: _fenceLat, centerLon: _fenceLon,
+        radiusMeters: _fenceRadius, timeProvider: t,
+      );
+      _coldStartInside(m, t);
+
+      m.suspend();
+      m.resume();
+      m.suspend();
+
+      // 连续 dispose 两次
+      expect(() => m.dispose(), returnsNormally);
+      expect(() => m.dispose(), returnsNormally);
+    });
+
+    test('transitioning 状态下 suspend 后立即 dispose', () {
+      final t = FakeTimeProvider();
+      final m = GeofenceStateMachine(
+        fenceId: 'home', centerLat: _fenceLat, centerLon: _fenceLon,
+        radiusMeters: _fenceRadius, timeProvider: t,
+      );
+      _coldStartOutside(m, t);
+      m.evaluatePosition(_inside); // → transitioning
+      expect(m.statusNotifier.value, GeofenceStatus.transitioning);
+
+      m.suspend();
+      expect(() => m.dispose(), returnsNormally);
+    });
+  });
+
   group('【通用】dispose() 幂等', () {
     test('连续两次 dispose 不抛异常', () {
       final t = FakeTimeProvider();

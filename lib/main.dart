@@ -4,7 +4,10 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import 'core/privacy/privacy_fuse_controller.dart';
 import 'core/providers.dart';
+import 'features/chat/pages/interaction_sheet.dart';
+import 'features/fence/pages/fence_event_history_page.dart';
 import 'features/map/presentation/pages/empty_state_page.dart';
+import 'features/profile/pages/privacy_settings_page.dart';
 import 'demo/location_demo.dart';
 
 void main() async {
@@ -38,6 +41,7 @@ class _MyAppState extends ConsumerState<MyApp> {
       debugShowCheckedModeBanner: false,
       theme: theme,
       scaffoldMessengerKey: messengerKey,
+      onGenerateRoute: _onGenerateRoute,
       home: _buildRootPage(),
     );
   }
@@ -54,6 +58,65 @@ class _MyAppState extends ConsumerState<MyApp> {
 
     // 阶段 2：围栏初始化 → 决定显示引导页还是地图
     return _InitializationRouter();
+  }
+
+  /// 应用路由契约
+  ///
+  /// 支持：
+  ///   - /interaction/:friendId  → 好友互动页
+  ///   - /privacy-settings       → 隐私与位置设置页
+  ///   - /fence/:fenceId/events  → 围栏事件历史页
+  Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
+    final name = settings.name;
+    if (name == null) return null;
+
+    // /interaction/:friendId
+    if (name.startsWith('/interaction/')) {
+      final friendId = name.substring('/interaction/'.length);
+      if (friendId.isNotEmpty) {
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => InteractionSheet(
+            friendId: friendId,
+            friendName: '好友',
+            avatarUrl: '',
+          ),
+        );
+      }
+    }
+
+    // /privacy-settings
+    if (name == '/privacy-settings') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const PrivacySettingsPage(),
+      );
+    }
+
+    // /fence/:fenceId/events
+    if (name.startsWith('/fence/') && name.endsWith('/events')) {
+      final prefix = '/fence/';
+      final suffix = '/events';
+      final fenceId = name.substring(prefix.length, name.length - suffix.length);
+      if (fenceId.isNotEmpty) {
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => FenceEventHistoryPage(
+            fenceId: fenceId,
+            fenceName: fenceId == 'home' ? '家' : '围栏',
+          ),
+        );
+      }
+    }
+
+    // 未知路由：返回一个空错误页，避免抛异常崩溃
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: const Text('页面未找到')),
+        body: Center(child: Text('未知路由: $name')),
+      ),
+    );
   }
 }
 

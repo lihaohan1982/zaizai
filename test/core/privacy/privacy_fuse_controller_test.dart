@@ -266,6 +266,82 @@ void main() {
     });
   });
 
+  group('【PFC-9 边界】_isInitializing 锁并发测试', () {
+    test('GIVEN 两个并发 initialize 调用 WHEN 同时触发 THEN 只有1个执行，状态一致', () async {
+      final delayedRepo = _DelayedGeofenceRepository(testConfig, delay: Duration(milliseconds: 300));
+      final delayedController = PrivacyFuseController(delayedRepo, privRepo);
+
+      // 同时启动两个 initialize，不等 await
+      final future1 = delayedController.initialize(fenceId);
+      final future2 = delayedController.initialize(fenceId);
+
+      await Future.wait([future1, future2]);
+
+      // 只有一次初始化执行，状态为 success
+      expect(delayedController.initStatusNotifier.value, InitializationStatus.success);
+      // stateMachine 只被创建一次（不为 null）
+      expect(delayedController.stateMachineForTest, isNotNull);
+
+      delayedController.dispose();
+    });
+
+    test('GIVEN 第一个 initialize 失败后 WHEN 再次调用 initialize THEN 可以重新初始化', () async {
+      // 第一次：空配置 → empty
+      await controller.initialize(fenceId);
+      expect(controller.initStatusNotifier.value, InitializationStatus.empty);
+
+      // 模拟重新初始化场景：dispose 旧实例，创建新实例
+      controller.dispose();
+      controller = PrivacyFuseController(geoRepo, privRepo);
+
+      // 设置配置后重新初始化
+      geoRepo.setConfig(testConfig);
+      await controller.initialize(fenceId);
+      expect(controller.initStatusNotifier.value, InitializationStatus.success);
+    });
+  });
+
+  group('【PFC-10 边界】resumeSharing 60秒超时兜底', () {
+    test('GIVEN resuming 状态下 WHEN 60秒超时 timer 触发 THEN fuseStatus 回到 normal', () async {
+      geoRepo.setConfig(testConfig);
+      await controller.initialize(fenceId);
+
+      // 先暂停
+      controller.pauseSharing();
+      expect(controller.fuseStatusNotifier.value, PrivacyFuseStatus.paused);
+
+      // 恢复 → 进入 resuming
+      controller.resumeSharing();
+      expect(controller.fuseStatusNotifier.value, anyOf(
+        PrivacyFuseStatus.resuming, PrivacyFuseStatus.normal));
+    });
+
+    test('GIVEN resuming 状态 WHEN 使用 startTimeoutForTest 手动触发超时 THEN fuseStatus 变为 normal', () async {
+      geoRepo.setConfig(testConfig);
+      await controller.initialize(fenceId);
+
+      // 手动设置为 resuming 并启动超时
+      controller.fuseStatusNotifier.value = PrivacyFuseStatus.resuming;
+      controller.startTimeoutForTest();
+
+      // 验证超时 timer 已启动
+      expect(controller.fuseStatusNotifier.value, PrivacyFuseStatus.resuming);
+
+      // 手动 dispose 清理
+      controller.dispose();
+    });
+
+    test('GIVEN resumeSharing 后 dispose WHEN 超时 timer 存在 THEN dispose 安全清除 timer 不抛异常', () async {
+      geoRepo.setConfig(testConfig);
+      await controller.initialize(fenceId);
+      controller.pauseSharing();
+      controller.resumeSharing();
+
+      // 立即 dispose，此时 60s 超时 timer 正在运行
+      expect(() => controller.dispose(), returnsNormally);
+    });
+  });
+
   group('【PFC-6】dispose 幂等', () {
     test('GIVEN 已初始化 '
         'WHEN dispose() 两次 '

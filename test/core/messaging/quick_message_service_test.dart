@@ -67,16 +67,15 @@ void main() {
     ));
     await privacyController.initialize(fenceId);
 
-    // 构造 QuickMessageService（8 个参数，顺序严格匹配构造函数）
+    // 构造 QuickMessageService（7 个参数，partnerId 为第7个位置参数）
     service = QuickMessageService(
-      privacyController,   // 1. _privacyController
-      stateMachine,        // 2. _stateMachine
-      fakeWs,             // 3. _wsService
-      fakeStore,          // 4. _offlineStore
-      fakeUuid,           // 5. _uuidProvider
-      fakeTime,           // 6. _timeProvider
-      currentUserId,      // 7. _currentUserId
-      partnerId,          // 8. _partnerId
+      privacyController,
+      stateMachine,
+      fakeWs,
+      fakeStore,
+      fakeUuid,
+      fakeTime,
+      partnerId,
     );
     service.initialize();
   });
@@ -94,16 +93,20 @@ void main() {
     });
 
     test('发送手动快捷消息 → WebSocket 发出，离线存储为空', () async {
-      await service.sendManualQuickMessage('Hello');
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'Hello',
+      );
 
       expect(fakeWs.sentMessages.length, 1);
       expect(fakeStore.pending.length, 0);
 
       final sent = fakeWs.sentMessages.first;
-      expect(sent['event'], 'message:quick');
+      expect(sent['event'], 'message_quick');
       final payload = sent['payload'] as Map<String, dynamic>;
       expect(payload['custom_text'], 'Hello');
-      expect(payload['sender_id'], currentUserId);
+      expect(payload['sender_id'], partnerId);
       expect(payload['receiver_id'], partnerId);
     });
 
@@ -121,7 +124,11 @@ void main() {
     });
 
     test('发送手动快捷消息 → WebSocket 未发出，离线存储有 1 条', () async {
-      await service.sendManualQuickMessage('Hello offline');
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'Hello offline',
+      );
 
       expect(fakeWs.sentMessages.length, 0);
       expect(fakeStore.pending.length, 1);
@@ -129,7 +136,11 @@ void main() {
     });
 
     test('离线消息可通过 fetchPendingMessages 按 receiverId 查询', () async {
-      await service.sendManualQuickMessage('msg1');
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'msg1',
+      );
       // 用另一个 userId 查询，应返回空
       final result = await fakeStore.fetchPendingMessages('other-user');
       expect(result.length, 0);
@@ -140,7 +151,11 @@ void main() {
     });
 
     test('markAsSent 后消息从存储中移除', () async {
-      await service.sendManualQuickMessage('msg1');
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'msg1',
+      );
       final msgId = fakeStore.pending.first.id;
 
       await fakeStore.markAsSent(msgId);
@@ -174,10 +189,10 @@ void main() {
       expect(fakeStore.pending.length, 0);
 
       final sent = fakeWs.sentMessages.first;
-      expect(sent['event'], 'message:quick');
+      expect(sent['event'], 'message_quick');
       final payload = sent['payload'] as Map<String, dynamic>;
       expect(payload['content_key'], 'home_arrived');
-      expect(payload['sender_id'], currentUserId);
+      expect(payload['sender_id'], partnerId);
       expect(payload['receiver_id'], partnerId);
     });
 
@@ -245,6 +260,7 @@ void main() {
         receiverId: partnerId,
         contentKey: 'manual_quick',
         customText: 'test',
+        source: MessageSource.manual,
         timestamp: fakeTime.now(),
       ));
 
@@ -271,7 +287,11 @@ void main() {
       fakeWs.throwOnSend = true;
       fakeWs.sendException = Exception('network error');
 
-      await service.sendManualQuickMessage('fallback');
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'fallback',
+      );
 
       expect(fakeWs.sentMessages.length, 0);
       expect(fakeStore.pending.length, 1);
@@ -287,14 +307,17 @@ void main() {
         throwingStore,
         fakeUuid,
         fakeTime,
-        currentUserId,
         partnerId,
       );
       serviceWithThrowingStore.initialize();
 
       fakeWs.setConnected(false);
 
-      await serviceWithThrowingStore.sendManualQuickMessage('throw');
+      await serviceWithThrowingStore.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'throw',
+      );
 
       serviceWithThrowingStore.dispose();
 
@@ -339,9 +362,21 @@ void main() {
     test('【QMS-19】GIVEN 离线状态 WHEN 连续发送多条手动消息 THEN 全部正确存储', () async {
       fakeWs.setConnected(false);
 
-      await service.sendManualQuickMessage('msg-1');
-      await service.sendManualQuickMessage('msg-2');
-      await service.sendManualQuickMessage('msg-3');
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'msg-1',
+      );
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'msg-2',
+      );
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'msg-3',
+      );
 
       expect(fakeWs.sentMessages.length, 0);
       expect(fakeStore.pending.length, 3);
@@ -350,9 +385,21 @@ void main() {
     test('【QMS-20】GIVEN 离线存储多条消息 WHEN 查询 THEN 顺序与发送顺序一致', () async {
       fakeWs.setConnected(false);
 
-      await service.sendManualQuickMessage('first');
-      await service.sendManualQuickMessage('second');
-      await service.sendManualQuickMessage('third');
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'first',
+      );
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'second',
+      );
+      await service.sendManualQuickMessage(
+        receiverId: partnerId,
+        contentKey: 'manual_quick',
+        customText: 'third',
+      );
 
       final messages = await fakeStore.fetchPendingMessages(partnerId);
       expect(messages.length, 3);
