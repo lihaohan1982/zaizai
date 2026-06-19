@@ -147,16 +147,19 @@ final friendListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) asyn
 // WebSocket
 // -------------------------------------------------------------------------
 
-/// WsClient 单例（依赖 AuthState token）
+/// WsClient 单例（依赖 AuthState token，[H-2] 惰性读取）
 final wsClientProvider = Provider<WsClient>((ref) {
   final auth = ref.watch(authStateProvider);
+  final tokenStorage = ref.read(tokenStorageProvider);
   final client = WsClient(
     baseUrl: AppConfig.wsBaseUrl,
-    token: auth.token ?? '',
+    tokenGetter: () => tokenStorage.readToken(), // [H-2] 每次重连动态读取最新 Token
     heartbeatInterval: const Duration(seconds: 30),
     pongTimeout: const Duration(seconds: 40),
   );
-  client.connect();
+  if (auth.isLoggedIn) {
+    client.connect();
+  }
   return client;
 });
 

@@ -41,6 +41,9 @@ class LocationStrategyEngine {
   Position? _lastPosition;
   DateTime? _lastReportTime;
 
+  /// 持久化的位置更新回调，确保前后台切换时不丢失
+  void Function(Position)? _onLocationUpdate;
+
   /// 当前上报级别（可供外部读取）
   LocationReportLevel get level => _level;
 
@@ -53,6 +56,7 @@ class LocationStrategyEngine {
   }) async {
     if (_isRunning) return;
     _isRunning = true;
+    _onLocationUpdate = onLocationUpdate; // [M-4] 持久化回调
 
     // 首次获取当前上报级别
     _level = await LocationScheduler.getReportLevel();
@@ -61,7 +65,7 @@ class LocationStrategyEngine {
     final settings = _getLocationSettings();
     _positionSub = Geolocator.getPositionStream(
       locationSettings: settings,
-    ).listen((pos) => _handlePosition(pos, onLocationUpdate));
+    ).listen((pos) => _handlePosition(pos, _onLocationUpdate!));
 
     // 监听电量变化（仅 iOS/Android）
     if (!kIsWeb) {
@@ -88,6 +92,7 @@ class LocationStrategyEngine {
   /// 停止引擎
   Future<void> stop() async {
     _isRunning = false;
+    _onLocationUpdate = null; // [M-4] 清理回调引用
     await _positionSub?.cancel();
     _positionSub = null;
     debugPrint('[LocationStrategyEngine] stopped');
@@ -185,12 +190,12 @@ class LocationStrategyEngine {
   }
 
   void _restartIfNeeded() async {
-    if (!_isRunning) return;
+    if (!_isRunning || _onLocationUpdate == null) return;
     await _positionSub?.cancel();
     final settings = _getLocationSettings();
     _positionSub = Geolocator.getPositionStream(
       locationSettings: settings,
-    ).listen((pos) => _handlePosition(pos, (p) {}));
+    ).listen((pos) => _handlePosition(pos, _onLocationUpdate!));
   }
 
   LocationSettings _getLocationSettings() {

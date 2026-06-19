@@ -8,7 +8,8 @@ import 'package:web_socket_channel/status.dart' as status;
 /// 功能：连接管理、心跳检测、指数退避重连、事件分发
 class WsClient {
   final String baseUrl;
-  final String token;
+  /// [H-2] 惰性 Token 读取：每次连接/鉴权时动态获取最新 Token
+  final Future<String?> Function() tokenGetter;
   final Duration heartbeatInterval;
   final Duration pongTimeout;
   final int maxReconnectAttempts;
@@ -43,7 +44,7 @@ class WsClient {
 
   WsClient({
     required this.baseUrl,
-    required this.token,
+    required this.tokenGetter,
     this.heartbeatInterval = const Duration(seconds: 30),
     this.pongTimeout = const Duration(seconds: 10),
     this.maxReconnectAttempts = 10,
@@ -59,7 +60,12 @@ class WsClient {
   }
 
   void _doConnect() {
+    _doConnectAsync();
+  }
+
+  Future<void> _doConnectAsync() async {
     try {
+      final token = await tokenGetter() ?? '';
       final wsUrl = Uri.parse('$baseUrl/ws?token=$token');
       _channel = WebSocketChannel.connect(wsUrl);
 
@@ -80,9 +86,9 @@ class WsClient {
       _reconnectAttempts = 0;
       _onConnected.add(null);
 
-      // 首帧鉴权：连接建立后立即发送 token
+      // 首帧鉴权：连接建立后立即发送最新 token
       if (token.isNotEmpty) {
-        _sendAuthFrame();
+        _sendAuthFrame(token);
       }
     } catch (e) {
       _onError.add(e);
@@ -90,8 +96,10 @@ class WsClient {
     }
   }
 
-  void _sendAuthFrame() {
+  void _sendAuthFrame([String? tokenOverride]) async {
     try {
+      final token = tokenOverride ?? await tokenGetter() ?? '';
+      if (token.isEmpty) return;
       final authFrame = json.encode({'type': 'auth', 'token': token});
       _channel?.sink.add(authFrame);
     } catch (e) {

@@ -16,7 +16,7 @@ void main() {
       // 被 catch 捕获并 add 到 _onError
       final client = WsClient(
         baseUrl: 'ws://localhost:8080',
-        token: 'test-token',
+        tokenGetter: () async => 'test-token',
         heartbeatInterval: const Duration(seconds: 300),
       );
 
@@ -34,7 +34,7 @@ void main() {
     test('GIVEN 收到合法 JSON 但 type 字段缺失 THEN type=null 走 default 分支，不崩溃', () async {
       final client = WsClient(
         baseUrl: 'ws://localhost:8080',
-        token: 'test-token',
+        tokenGetter: () async => 'test-token',
         heartbeatInterval: const Duration(seconds: 300),
       );
 
@@ -75,7 +75,7 @@ void main() {
     test('GIVEN WsClient 未连接 WHEN send() THEN 触发 onError', () async {
       final client = WsClient(
         baseUrl: 'ws://localhost:8080',
-        token: 'test-token',
+        tokenGetter: () async => 'test-token',
         heartbeatInterval: const Duration(seconds: 300),
       );
 
@@ -98,7 +98,7 @@ void main() {
     test('GIVEN 主动 disconnect WHEN 调用后 THEN 不自动重连', () async {
       final client = WsClient(
         baseUrl: 'ws://localhost:8080',
-        token: 'test-token',
+        tokenGetter: () async => 'test-token',
         heartbeatInterval: const Duration(seconds: 300),
         maxReconnectAttempts: 3,
       );
@@ -113,7 +113,7 @@ void main() {
     test('GIVEN 重连次数达到上限 WHEN 超过 maxReconnectAttempts THEN 不再重连', () async {
       final client = WsClient(
         baseUrl: 'ws://localhost:8080',
-        token: 'test-token',
+        tokenGetter: () async => 'test-token',
         heartbeatInterval: const Duration(seconds: 300),
         maxReconnectAttempts: 0,
       );
@@ -128,7 +128,7 @@ void main() {
     test('GIVEN 未连接 WHEN dispose THEN 不抛异常', () {
       final client = WsClient(
         baseUrl: 'ws://localhost:8080',
-        token: 'test-token',
+        tokenGetter: () async => 'test-token',
       );
 
       expect(() => client.dispose(), returnsNormally);
@@ -137,7 +137,7 @@ void main() {
     test('GIVEN 已 disconnect WHEN dispose THEN 不抛异常', () {
       final client = WsClient(
         baseUrl: 'ws://localhost:8080',
-        token: 'test-token',
+        tokenGetter: () async => 'test-token',
       );
 
       client.disconnect();
@@ -147,7 +147,7 @@ void main() {
     test('GIVEN 事件流已关闭 WHEN 再次读取 THEN 不崩溃', () async {
       final client = WsClient(
         baseUrl: 'ws://localhost:8080',
-        token: 'test-token',
+        tokenGetter: () async => 'test-token',
       );
 
       client.dispose();
@@ -171,7 +171,7 @@ void main() {
     test('GIVEN 客户端断线 WHEN send() THEN 消息通过 onError 通知调用方', () async {
       final client = WsClient(
         baseUrl: 'ws://localhost:8080',
-        token: 'test-token',
+        tokenGetter: () async => 'test-token',
         heartbeatInterval: const Duration(seconds: 300),
       );
 
