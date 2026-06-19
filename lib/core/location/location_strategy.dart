@@ -47,6 +47,22 @@ class LocationStrategyEngine {
   /// 当前上报级别（可供外部读取）
   LocationReportLevel get level => _level;
 
+  /// 引擎是否正在运行
+  bool get isRunning => _isRunning;
+
+  /// 向引擎注入一个外部位置（供后台服务调用）
+  ///
+  /// [position] 外部获取的 GPS 位置
+  ///
+  /// 绕过 Geolocator stream，直接走引擎的筛选和上报逻辑。
+  void injectLocation(Position position) {
+    if (!_isRunning || _onLocationUpdate == null) return;
+    if (position.accuracy > _maxAccuracy) return;
+    _handlePosition(position, _onLocationUpdate!);
+    debugPrint(
+        '[LocationStrategyEngine] injected loc: ${position.latitude}±${position.accuracy.toStringAsFixed(0)}m');
+  }
+
   // ── 公开方法 ──────────────────────────────────────────
 
   /// 启动引擎

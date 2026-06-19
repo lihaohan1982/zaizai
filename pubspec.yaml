@@ -63,6 +63,10 @@ dependencies:
   flutter_secure_storage: ^10.3.1
 
 
+  # Background / Foreground Service
+  flutter_foreground_task: ^8.10.1
+  workmanager: ^0.5.2
+
   # UI utilities
   qr_flutter: ^4.1.0
   intl: ^0.19.0

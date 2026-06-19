@@ -195,8 +195,8 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
                   _state == _EmptyState.locationOff)
                 TextButton(
                   onPressed: _state == _EmptyState.locationOff
-                      ? _openSettings
-                      : _openLocationSettings,
+                      ? _openLocationSettings // 定位开关关闭 → 跳系统定位设置
+                      : _openSettings,       // 权限被拒 → 跳 App 权限页
                   child: Text(
                     _state == _EmptyState.locationOff
                         ? '打开系统设置'

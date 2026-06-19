@@ -69,25 +69,28 @@ class _LocationMapState extends State<LocationMap>
   }
 
   /// 使用多边形近似绘制圆形围栏
+  ///
+  /// 坐标转换：米 → 度
+  ///   1°纬度 ≈ 111320m，1°经度 ≈ 111320m × cos(lat)
+  ///   多边形顶点数 points 越多，圆越平滑（默认32点）
   List<LatLng> _generateCirclePoints(
     LatLng center,
     double radius, [
     int points = 32,
   ]) {
-    const double earthRadius = 6378137.0;
+    final latDegPerMeter = 1.0 / 111320.0;
+    final cosLat = math.cos(center.latitudeInRad);
+    final lonDegPerMeter = latDegPerMeter / (cosLat == 0 ? 1e-10 : cosLat);
+
     return List.generate(points, (i) {
       final angle = 2 * math.pi * i / points;
-      final dx = radius * math.cos(angle);
-      final dy = radius * math.sin(angle);
-      final dLat = (dy / earthRadius) * (180 / math.pi);
-      final dLng = (dx / earthRadius) *
-          (180 / math.pi) /
-          math.cos(center.latitudeInRad);
-      // ignore: unused_local_variable
-      (dLng);
+      final dx = radius * math.cos(angle); // 米（东西方向）
+      final dy = radius * math.sin(angle); // 米（南北方向）
+      final dLatDeg = dy * latDegPerMeter;
+      final dLonDeg = dx * lonDegPerMeter;
       return LatLng(
-        center.latitudeInRad + dLat,
-        center.longitudeInRad,
+        center.latitudeInRad + dLatDeg,
+        center.longitudeInRad + dLonDeg,
       );
     });
   }
