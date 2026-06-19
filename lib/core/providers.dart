@@ -18,6 +18,7 @@ import 'messaging/quick_message_service.dart';
 import 'network/websocket_service.dart';
 import 'network/ws_client.dart';
 import 'privacy/privacy_fuse_controller.dart';
+import 'package:location_chat_app/features/chat/controllers/chat_interaction_controller.dart';
 import 'repositories/geofence_repository.dart';
 import 'repositories/privacy_state_repository.dart';
 import 'security/geo_encryption_service.dart';
@@ -159,6 +160,36 @@ final wsClientProvider = Provider<WsClient>((ref) {
   return client;
 });
 
+
+// -------------------------------------------------------------------------
+// ChatInteractionController（按好友隔离，family provider）
+// -------------------------------------------------------------------------
+
+/// 好友互动控制器 Provider（按 friendId 隔离）
+///
+/// 依赖 QuickMessageService（异步），故使用 FutureProvider.family
+final chatInteractionControllerProvider =
+    FutureProvider.family<ChatInteractionController, String>(
+  (ref, friendId) async {
+    final quickMessageService =
+        await ref.watch(quickMessageServiceProvider(friendId).future);
+    final wsClient = ref.watch(wsClientProvider);
+    final authState = ref.watch(authStateProvider);
+    final dioClient = ref.watch(dioClientProvider);
+    final messengerKey = ref.watch(scaffoldMessengerKeyProvider);
+    final fences = await ref.watch(fencesProvider.future);
+
+    return ChatInteractionController(
+      messengerKey: messengerKey,
+      friendId: friendId,
+      fences: fences,
+      quickMessageService: quickMessageService,
+      wsClient: wsClient,
+      authState: authState,
+      dioClient: dioClient,
+    );
+  },
+);
 
 // -------------------------------------------------------------------------
 // QuickMessageService（按好友隔离，family provider）

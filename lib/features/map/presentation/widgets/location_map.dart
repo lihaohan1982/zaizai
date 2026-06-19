@@ -1,15 +1,16 @@
 // lib/features/map/presentation/widgets/location_map.dart
-// 高德地图 Polygon 围栏渲染 + 闪烁动画 + 隐私暂停遮罩
+// OpenStreetMap 围栏渲染 + 闪烁动画 + 隐私暂停遮罩
+// 使用 flutter_map（无需 API Key）
 
 import 'dart:math' as math;
-import 'dart:ui'; // ImageFilter
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:amap_flutter_map/amap_flutter_map.dart';
-import 'package:amap_flutter_base/amap_flutter_base.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:location_chat_app/core/privacy/privacy_fuse_controller.dart';
 
-/// 使用高德地图 Polygon 渲染围栏，支持触发闪烁动画
+/// 使用 OpenStreetMap 渲染围栏，支持触发闪烁动画
 class LocationMap extends StatefulWidget {
   final List<Map<String, dynamic>> fences;
   final String? triggeredFenceId;
@@ -30,6 +31,9 @@ class _LocationMapState extends State<LocationMap>
     with SingleTickerProviderStateMixin {
   late AnimationController _blinkController;
   late VoidCallback _statusListener;
+
+  // 地图控制器（用于后续动态更新）
+  final MapController _mapController = MapController();
 
   bool get _isPaused =>
       widget.privacyController.fuseStatusNotifier.value ==
@@ -59,6 +63,7 @@ class _LocationMapState extends State<LocationMap>
   @override
   void dispose() {
     _blinkController.dispose();
+    _mapController.dispose();
     widget.privacyController.fuseStatusNotifier.removeListener(_statusListener);
     super.dispose();
   }
@@ -77,15 +82,20 @@ class _LocationMapState extends State<LocationMap>
       final dLat = (dy / earthRadius) * (180 / math.pi);
       final dLng = (dx / earthRadius) *
           (180 / math.pi) /
-          math.cos(center.latitude * math.pi / 180);
-      return LatLng(center.latitude + dLat, center.longitude + dLng);
+          math.cos(center.latitudeInRad);
+      // ignore: unused_local_variable
+      (dLng);
+      return LatLng(
+        center.latitudeInRad + dLat,
+        center.longitudeInRad,
+      );
     });
   }
 
   @override
   Widget build(BuildContext context) {
     // 构建围栏多边形集合
-    final polygonsSet = <Polygon>{};
+    final polygons = <Polygon>{};
     for (final fence in widget.fences) {
       final isTriggered =
           widget.triggeredFenceId == fence['id'].toString();
@@ -97,43 +107,50 @@ class _LocationMapState extends State<LocationMap>
         (fence['radius'] as num).toDouble(),
       );
 
-      final opacity =
-          isTriggered ? _blinkController.value * 0.5 : 0.2;
+      final opacity = isTriggered ? _blinkController.value * 0.5 : 0.2;
 
-      polygonsSet.add(Polygon(
+      polygons.add(Polygon(
         points: points,
-        strokeColor: isTriggered ? Colors.orange : Colors.blue,
-        fillColor: isTriggered
+        color: isTriggered
             ? Colors.orange.withValues(alpha: opacity)
             : Colors.blue.withValues(alpha: opacity),
-        strokeWidth: 2,
+        borderColor: isTriggered ? Colors.orange : Colors.blue,
+        borderStrokeWidth: 2,
       ));
     }
 
     return Stack(
       children: [
-        // 高德地图 + 围栏 Polygon
-        AMapWidget(
-          polygons: polygonsSet,
-          initialCameraPosition: const CameraPosition(
-            target: LatLng(39.909187, 116.397451), // 北京天安门
-            zoom: 13,
+        // OpenStreetMap + 围栏 Polygon
+        FlutterMap(
+          mapController: _mapController,
+          options: const MapOptions(
+            initialCenter: LatLng(39.909187, 116.397451), // 北京天安门
+            initialZoom: 13,
           ),
+          children: [
+            // OpenStreetMap 瓦片图层
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.locationchat.location_chat_app',
+            ),
+            // 围栏多边形
+            PolygonLayer(polygons: polygons.toList()),
+          ],
         ),
 
         // 好友 Marker（暂停时隐藏）
         if (!_isPaused)
           const Positioned(
             top: 100,
-            right: 100,
-            child:
-                Icon(Icons.account_circle, size: 40, color: Colors.red),
+            right: 16,
+            child: Icon(Icons.account_circle, size: 40, color: Colors.red),
           ),
 
         // 自身位置 Marker（始终显示）
         const Positioned(
           bottom: 100,
-          left: 100,
+          left: 16,
           child: Icon(Icons.person_pin_circle,
               size: 50, color: Colors.blue),
         ),

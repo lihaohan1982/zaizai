@@ -7,7 +7,7 @@ plugins {
 
 android {
     namespace = "com.locationchat.location_chat_app"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -24,10 +24,16 @@ android {
         applicationId = "com.locationchat.location_chat_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+
+        // AMAP API Key: read from local.properties or env var, never hardcoded
+        val amapKey = System.getenv("AMAP_API_KEY")
+            ?: project.findProperty("AMAP_API_KEY") as? String
+            ?: ""
+        manifestPlaceholders["AMAP_API_KEY"] = amapKey
     }
 
     buildTypes {
