@@ -27,18 +27,42 @@ import 'security/geo_encryption_service.dart';
 // Hive Box Providers
 // -------------------------------------------------------------------------
 
+/// Geofence 配置 Box（版本化，支持升级）
 final geofenceBoxProvider = FutureProvider<Box<dynamic>>((ref) async {
   if (!Hive.isBoxOpen('geofence_configs')) {
+    // [Phase0] Hive 版本化：通过 box.put('schema_version', 2) 手动管理
     await Hive.openBox<dynamic>('geofence_configs');
   }
-  return Hive.box<dynamic>('geofence_configs');
+  final box = Hive.box<dynamic>('geofence_configs');
+  // 检查并升级 schema 版本
+  final currentVersion = box.get('schema_version', defaultValue: 1) as int;
+  if (currentVersion < 2) {
+    // V1 → V2：新增加密字段，旧数据兼容读取
+    debugPrint('[Hive] geofence_configs: $currentVersion → 2');
+    // 标记需要迁移的数据
+    for (final key in box.keys.whereType<String>()) {
+      final data = box.get(key);
+      if (data is Map && !data.containsKey('centerLatEnc')) {
+        await box.put(key, {...data, 'needsMigration': true});
+      }
+    }
+    await box.put('schema_version', 2);
+  }
+  return box;
 });
 
+/// 隐私状态 Box（版本化，支持升级）
 final privacyBoxProvider = FutureProvider<Box<dynamic>>((ref) async {
   if (!Hive.isBoxOpen('privacy_state')) {
     await Hive.openBox<dynamic>('privacy_state');
   }
-  return Hive.box<dynamic>('privacy_state');
+  final box = Hive.box<dynamic>('privacy_state');
+  final currentVersion = box.get('schema_version', defaultValue: 1) as int;
+  if (currentVersion < 1) {
+    debugPrint('[Hive] privacy_state: $currentVersion → 1');
+    await box.put('schema_version', 1);
+  }
+  return box;
 });
 
 // -------------------------------------------------------------------------
@@ -56,10 +80,19 @@ final tokenStorageProvider = Provider<TokenStorage>((ref) {
 });
 
 /// Dio 客户端（依赖注入 TokenStorage + 环境变量 baseUrl）
+///
+/// [onAuthFailure]：Token 刷新失败时回调（通常导航到登录页）
 final dioClientProvider = Provider<DioClient>((ref) {
   return DioClient(
     baseUrl: AppConfig.apiBaseUrl,
     tokenStorage: ref.read(tokenStorageProvider),
+    onAuthFailure: () {
+      // Token 失效 → 强制登出，导航到登录页
+      final auth = ref.read(authStateProvider);
+      auth.logout();
+      // TODO(phase0): 使用 GoRouter 或 Navigator 导航到登录页
+      debugPrint('[Auth] Token 失效，需要重新登录');
+    },
   );
 });
 

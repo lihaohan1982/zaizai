@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
+import 'package:flutter/foundation.dart';
 
 /// WebSocket 客户端
 ///
@@ -161,16 +162,25 @@ class WsClient {
     _pongTimer = null;
   }
 
-  /// 指数退避重连
+  /// 指数退避 + 随机抖动（Jitter）重连
+  ///
+  /// 防止服务端重启时所有客户端同步重连引发“惊群效应”。
+  /// 算法：delay = min(base * 2^attempt, max) + random(0, delay * 0.3)
   void _scheduleReconnect() {
     if (_intentionalClose) return;
     if (_reconnectAttempts >= maxReconnectAttempts) return;
 
     _reconnectAttempts++;
-    // 指数退避：2^attempts 秒，上限 60 秒
-    final delay = Duration(
+    // 基础延迟：2^attempts 秒，上限 60 秒
+    final baseDelay = Duration(
       seconds: (1 << _reconnectAttempts).clamp(2, 60),
     );
+    // Full Jitter：在 [baseDelay, baseDelay * 1.3] 范围内随机
+    final jitterMs = baseDelay.inMilliseconds +
+        (baseDelay.inMilliseconds * 0.3 * (DateTime.now().millisecond / 1000)).round();
+    final delay = Duration(milliseconds: jitterMs);
+
+    debugPrint('[WsClient] Reconnect attempt $_reconnectAttempts after $delay');
     Timer(delay, _doConnect);
   }
 

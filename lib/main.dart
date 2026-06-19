@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/config/env_config.dart';
+import 'core/monitoring/sentry_service.dart';
 import 'core/privacy/privacy_fuse_controller.dart';
 import 'core/providers.dart';
 import 'features/chat/pages/interaction_sheet.dart';
@@ -12,11 +16,56 @@ import 'features/profile/pages/privacy_settings_page.dart';
 import 'demo/location_demo.dart';
 
 void main() async {
+  // ① 确保绑定初始化（必须在 runZonedGuarded 之前）
   WidgetsFlutterBinding.ensureInitialized();
   await Hive.initFlutter();
   await EnvConfig.load();
 
-  runApp(const ProviderScope(child: MyApp()));
+  // ② 初始化 Sentry 崩溃监控（Phase 1）
+  await SentryService.initialize();
+
+  // ③ Flutter 框架异常捕获
+  FlutterError.onError = _handleFlutterError;
+
+  // ④ 全局未捕获异常（异步/同步）拦截
+  runZonedGuarded(
+    () => runApp(const ProviderScope(child: MyApp())),
+    (error, stack) => _handleUncaughtError(error, stack),
+  );
+}
+
+/// Flutter 框架异常处理器
+///
+/// 捕获 build/layout/paint 阶段的异常，避免 UI 白屏，并上报 Sentry。
+void _handleFlutterError(FlutterErrorDetails details) {
+  // 始终打印（开发阶段快速定位）
+  FlutterError.dumpErrorToConsole(details);
+
+  // [Phase 1] 上报 Sentry
+  SentryService.captureException(
+    details.exception,
+    stackTrace: details.stack,
+    hint: 'flutter_error',
+    extra: {
+      'library': details.library,
+      'context': details.context?.toString(),
+      'silent': details.silent,
+    },
+  );
+}
+
+/// 未捕获异常处理器（Dart 层 + 异步异常）
+void _handleUncaughtError(Object error, StackTrace stack) {
+  // 始终打印
+  debugPrint('[UncaughtError] $error');
+  debugPrint('$stack');
+
+  // [Phase 1] 上报 Sentry
+  SentryService.captureException(
+    error,
+    stackTrace: stack,
+    hint: 'uncaught_error',
+  );
 }
 
 class MyApp extends ConsumerStatefulWidget {
@@ -43,6 +92,7 @@ class _MyAppState extends ConsumerState<MyApp> {
       debugShowCheckedModeBanner: false,
       theme: theme,
       scaffoldMessengerKey: messengerKey,
+      navigatorObservers: [SentryNavigatorObserver()],
       onGenerateRoute: _onGenerateRoute,
       home: _buildRootPage(),
     );

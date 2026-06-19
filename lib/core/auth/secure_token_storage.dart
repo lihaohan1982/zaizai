@@ -9,6 +9,7 @@ class SecureTokenStorage implements TokenStorage {
   final FlutterSecureStorage _storage;
 
   static const _tokenKey = 'auth_token';
+  static const _refreshTokenKey = 'auth_refresh_token';
 
   const SecureTokenStorage([this._storage = const FlutterSecureStorage()]);
 
@@ -20,4 +21,13 @@ class SecureTokenStorage implements TokenStorage {
 
   @override
   Future<void> deleteToken() => _storage.delete(key: _tokenKey);
+
+  @override
+  Future<String?> readRefreshToken() => _storage.read(key: _refreshTokenKey);
+
+  @override
+  Future<void> writeRefreshToken(String refreshToken) => _storage.write(key: _refreshTokenKey, value: refreshToken);
+
+  @override
+  Future<void> deleteRefreshToken() => _storage.delete(key: _refreshTokenKey);
 }

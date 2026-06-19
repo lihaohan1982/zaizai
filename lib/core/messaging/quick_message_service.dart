@@ -6,6 +6,7 @@ import 'package:location_chat_app/core/network/websocket_service.dart';
 import 'package:location_chat_app/core/messaging/offline_message_store.dart';
 import 'package:location_chat_app/core/messaging/message_payload.dart';
 import '../location/map_markers_notifier.dart';
+import '../utils/input_validator.dart';
 
 abstract class UuidProvider {
   String v4();
@@ -163,13 +164,23 @@ class QuickMessageService {
     String? customText,
     String? senderId,
   }) async {
+    // [Phase0] 输入校验：customText 过滤 XSS + 长度限制
+    String? validatedText = customText;
+    if (customText != null && customText.isNotEmpty) {
+      validatedText = InputValidator.validateMessage(customText);
+      if (validatedText == null) {
+        debugPrint('[QuickMessageService] customText 校验失败，消息未发送');
+        return;
+      }
+    }
+
     final payload = MessagePayload(
       id: _uuidProvider.v4(),
       type: MessageType.quick,
-      senderId: senderId ?? _partnerId, // [修复] 优先使用传入的 senderId
+      senderId: senderId ?? _partnerId,
       receiverId: receiverId,
       contentKey: contentKey,
-      customText: customText,
+      customText: validatedText,
       source: MessageSource.manual,
       timestamp: _timeProvider.now(),
     );
@@ -187,22 +198,28 @@ class QuickMessageService {
     );
   }
 
+  /// 拍一拍节流器（防止高频点击）
+  final _pokeThrottle = Throttle(duration: Duration(seconds: 3));
+
   /// 发送拍一拍（瞬时消息，不落盘）
   Future<void> sendPoke(String receiverId, {String? senderId}) async {
-    final payload = MessagePayload(
-      id: _uuidProvider.v4(),
-      type: MessageType.quick,
-      senderId: senderId ?? _partnerId, // [修复] 优先使用传入的 senderId
-      receiverId: receiverId,
-      contentKey: 'poke',
-      source: MessageSource.poke,
-      timestamp: _timeProvider.now(),
-      transient: true,
-    );
-    // 拍一拍不落盘，直接发送
-    if (_wsService.isConnected) {
-      await _wsService.send('message_quick', payload.toJson());
-    }
+    // [Phase0] 节流：3 秒内重复点击忽略
+    _pokeThrottle.call(() async {
+      final payload = MessagePayload(
+        id: _uuidProvider.v4(),
+        type: MessageType.quick,
+        senderId: senderId ?? _partnerId,
+        receiverId: receiverId,
+        contentKey: 'poke',
+        source: MessageSource.poke,
+        timestamp: _timeProvider.now(),
+        transient: true,
+      );
+      // 拍一拍不落盘，直接发送
+      if (_wsService.isConnected) {
+        await _wsService.send('message_quick', payload.toJson());
+      }
+    });
   }
 
   /// 核心分发：在线推送 / 离线落盘 / 异常兜底
