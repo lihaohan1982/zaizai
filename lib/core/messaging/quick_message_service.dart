@@ -176,7 +176,9 @@ class QuickMessageService {
     await _dispatchMessage(payload);
   }
 
-  /// [兼容旧版] 发送手动快捷消息（仅文本，receiverId 固定为 _partnerId）
+  /// 发送手动快捷消息（仅文本，receiverId 固定为 _partnerId）
+  /// [DEPRECATED] 请直接使用 sendManualQuickMessage
+  @Deprecated('Use sendManualQuickMessage instead')
   Future<void> sendManualQuickMessageOnly(String text) async {
     await sendManualQuickMessage(
       receiverId: _partnerId,

@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:battery_plus/battery_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
 import 'location_scheduler.dart';
+import 'package:location_chat_app/core/utils/geo_utils.dart';
 
 /// 定位策略引擎单例
 /// 负责：速度→频率映射、位移阈值过滤、精度过滤、生命周期模式切换
@@ -109,7 +109,7 @@ class LocationStrategyEngine {
     if (current.accuracy > _maxAccuracy) return null;
     final now = DateTime.now();
     if (last != null) {
-      final distance = _haversineDistance(
+      final distance = haversineDistance(
         last.latitude, last.longitude, current.latitude, current.longitude);
       if (distance >= _minDisplacement) {
         return _getInterval(current.speed);
@@ -161,7 +161,7 @@ class LocationStrategyEngine {
 
   Duration? _shouldReportFull(Position current) {
     if (_lastPosition != null) {
-      final distance = _haversineDistance(
+      final distance = haversineDistance(
         _lastPosition!.latitude,
         _lastPosition!.longitude,
         current.latitude,
@@ -229,24 +229,4 @@ class LocationStrategyEngine {
     debugPrint('[LocationStrategyEngine] level refreshed: $_level');
     if (_isRunning) _restartIfNeeded();
   }
-
-  // ── 工具 ──────────────────────────────────────────────
-  double _haversineDistance(
-    double lat1,
-    double lon1,
-    double lat2,
-    double lon2,
-  ) {
-    const double R = 6371000;
-    final double dLat = _toRadians(lat2 - lat1);
-    final double dLon = _toRadians(lon2 - lon1);
-    final double a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(_toRadians(lat1)) *
-            cos(_toRadians(lat2)) *
-            sin(dLon / 2) *
-            sin(dLon / 2);
-    return R * 2 * atan2(sqrt(a), sqrt(1 - a));
-  }
-
-  double _toRadians(double degree) => degree * pi / 180.0;
 }

@@ -1,8 +1,8 @@
 // lib/features/chat/controllers/chat_interaction_controller.dart
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:location_chat_app/core/utils/geo_utils.dart';
 import 'package:location_chat_app/core/auth/auth_state.dart';
 import 'package:location_chat_app/core/messaging/message_payload.dart';
 import 'package:location_chat_app/core/messaging/quick_message_service.dart';
@@ -230,7 +230,7 @@ class ChatInteractionController extends ChangeNotifier {
         final double fLat = (fence['lat'] as num).toDouble();
         final double fLng = (fence['lng'] as num).toDouble();
         final double radius = (fence['radius'] as num?)?.toDouble() ?? 200;
-        final double dist = _haversine(lat, lng, fLat, fLng);
+        final double dist = haversineDistance(lat, lng, fLat, fLng);
         if (dist <= radius) {
           locationDesc = '📍 大概${fence['name']}';
           break;
@@ -240,18 +240,6 @@ class ChatInteractionController extends ChangeNotifier {
 
     _friendLocationData = {...data, 'locationDesc': locationDesc};
     notifyListeners();
-  }
-
-  /// Haversine 距离计算（米）
-  double _haversine(double lat1, double lon1, double lat2, double lon2) {
-    const R = 6371000;
-    final dLat = (lat2 - lat1) * pi / 180;
-    final dLon = (lon2 - lon1) * pi / 180;
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) *
-            sin(dLon / 2) * sin(dLon / 2);
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return R * c;
   }
 
   void _addMessage(MessagePayload msg) {

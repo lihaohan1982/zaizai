@@ -1,15 +1,13 @@
-library;
-
-/// WebSocketService 实现：将 WsClient 的多路 Stream 适配为统一的 onMessage 流
-///
-/// WsClient 的事件分发设计（type 路由）：
-///   SYSTEM             → onSystem
-///   LOCATION_UPDATE    → onLocationUpdate
-///   friend_privacy_change → onFriendPrivacyChange
-///   initial_sync        → onInitialSync
-///   message_quick       → onQuickMessage
-///
-/// WebSocketService.onMessage 只路由 message_quick，其他类型由各自专有 Stream 处理。
+// WebSocketService 实现：将 WsClient 的多路 Stream 适配为统一的 onMessage流
+//
+// WsClient 的事件分发设计（type 路由）：
+//   SYSTEM             → onSystem
+//   LOCATION_UPDATE    → onLocationUpdate
+//   friend_privacy_change → onFriendPrivacyChange
+//   initial_sync        → onInitialSync
+//   message_quick       → onQuickMessage
+//
+// WebSocketService.onMessage 只路由 message_quick，其他类型由各自专有 Stream 处理。
 import 'dart:async';
 import 'package:location_chat_app/core/network/ws_client.dart';
 import 'package:location_chat_app/core/network/websocket_service.dart';

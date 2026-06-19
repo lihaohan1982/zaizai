@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math';
+import 'package:location_chat_app/core/utils/geo_utils.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 
@@ -57,6 +57,7 @@ class GeofenceStateMachine {
   final ValueNotifier<int> coldStartGeneration = ValueNotifier(0);
 
   Timer? _enterTimer;
+  // TODO(L-2): _exitTimer 从未启动，退出确认逻辑缺失（当前直接切换状态）
   Timer? _exitTimer;
 
   bool _isSuspended = false;
@@ -86,17 +87,6 @@ class GeofenceStateMachine {
     this.onStatusChanged,
   })  : _config = config ?? const GeofenceConfig(),
         _timeProvider = timeProvider ?? SystemTimeProvider();
-
-  double _haversineDistance(double lat1, double lon1, double lat2, double lon2) {
-    const R = 6371000.0;
-    final dLat = (lat2 - lat1) * pi / 180;
-    final dLon = (lon2 - lon1) * pi / 180;
-    final a = sin(dLat / 2) * sin(dLat / 2) +
-        cos(lat1 * pi / 180) * cos(lat2 * pi / 180) *
-        sin(dLon / 2) * sin(dLon / 2);
-    final c = 2 * atan2(sqrt(a), sqrt(1 - a));
-    return R * c;
-  }
 
   bool validatePositionAccuracy(Position position) {
     return position.accuracy <= _config.fenceAccuracyThreshold;
@@ -167,7 +157,7 @@ class GeofenceStateMachine {
     if (_isSuspended) return;
     if (!validatePositionAccuracy(position)) return;
 
-    final distance = _haversineDistance(
+    final distance = haversineDistance(
       position.latitude, position.longitude, centerLat, centerLon,
     );
     final bool isCurrentlyInside = distance <= radiusMeters;

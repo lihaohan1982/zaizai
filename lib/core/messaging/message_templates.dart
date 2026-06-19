@@ -1,9 +1,7 @@
-library;
-
-/// 消息话术模板 — 温暖友好，符合伴伴产品调性
-///
-/// 格式：contentKey → 显示文本
-/// 使用场景由 source 字段区分（geofence / manual / privacy）
+// 消息话术模板 — 温暖友好，符合伴伴产品调性
+//
+// 格式：contentKey → 显示文本
+// 使用场景由 source 字段区分（geofence / manual / privacy）
 
 class MessageTemplates {
   MessageTemplates._();

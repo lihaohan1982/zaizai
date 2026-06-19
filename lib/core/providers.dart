@@ -202,10 +202,13 @@ final quickMessageServiceProvider = FutureProvider.family<QuickMessageService, S
   (ref, friendId) async {
     final privacy = await ref.watch(privacyFuseControllerProvider.future);
     final wsClient = ref.watch(wsClientProvider);
+    // encryption 不再传入 _buildPlaceholderStateMachine（已移除该参数）
+    // 但保留 watch 以保持加密服务的生命周期
+    // ignore: unused_local_variable
     final encryption = ref.watch(geoEncryptionServiceProvider);
 
     // 构造占位 StateMachine（围栏事件由后端推送触发，前端监听隐私联动）
-    final stateMachine = _buildPlaceholderStateMachine(friendId, encryption);
+    final stateMachine = _buildPlaceholderStateMachine(friendId);
 
     final offlineStore = InMemoryOfflineMessageStore();
 
@@ -230,7 +233,6 @@ final quickMessageServiceProvider = FutureProvider.family<QuickMessageService, S
 /// 构建占位 GeofenceStateMachine（使用默认坐标，围栏事件由后端推送）
 GeofenceStateMachine _buildPlaceholderStateMachine(
   String fenceId,
-  GeoEncryptionService encryption,
 ) {
   // 默认围栏中心（北京），真实数据由后端推送更新
   const defaultLat = 39.9042;
