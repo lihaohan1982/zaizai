@@ -16,20 +16,25 @@ import 'features/profile/pages/privacy_settings_page.dart';
 import 'demo/location_demo.dart';
 
 void main() async {
-  // ① 确保绑定初始化（必须在 runZonedGuarded 之前）
-  WidgetsFlutterBinding.ensureInitialized();
-  await Hive.initFlutter();
-  await EnvConfig.load();
+  // ① 在 runZonedGuarded 内部完成所有初始化，同一 zone
+  await runZonedGuarded(
+    () async {
+      // 绑定初始化（必须在任何 Flutter API 之前）
+      WidgetsFlutterBinding.ensureInitialized();
 
-  // ② 初始化 Sentry 崩溃监控（Phase 1）
-  await SentryService.initialize();
+      // Flutter 框架异常捕获
+      FlutterError.onError = _handleFlutterError;
 
-  // ③ Flutter 框架异常捕获
-  FlutterError.onError = _handleFlutterError;
+      // Hive + 环境配置
+      await Hive.initFlutter();
+      await EnvConfig.load();
 
-  // ④ 全局未捕获异常（异步/同步）拦截
-  runZonedGuarded(
-    () => runApp(const ProviderScope(child: MyApp())),
+      // Sentry 崩溃监控（Phase 1）
+      await SentryService.initialize();
+
+      // 启动 App
+      runApp(const ProviderScope(child: MyApp()));
+    },
     (error, stack) => _handleUncaughtError(error, stack),
   );
 }
