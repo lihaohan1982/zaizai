@@ -87,8 +87,13 @@ class PrivacyFuseController {
     try {
       initStatusNotifier.value = InitializationStatus.loading;
 
-      // [时序安全] 必须先 await 解密加载，再构造状态机
-      final GeofenceConfigData? configData = await _geofenceRepo.loadConfig(fenceId);
+      // [生产级防御] 加载配置添加 10 秒超时，防止 FlutterSecureStorage 死锁
+      final GeofenceConfigData? configData = await _geofenceRepo
+          .loadConfig(fenceId)
+          .timeout(const Duration(seconds: 10), onTimeout: () {
+        debugPrint('[PrivacyFuseController] loadConfig 超时(10s)，降级为 empty 状态');
+        return null;
+      });
 
       if (configData == null) {
         // [空状态处理] 明确告知 UI 层无围栏数据，展示引导创建 UI

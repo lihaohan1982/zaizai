@@ -126,7 +126,10 @@ final privacyStateRepositoryProvider = FutureProvider<PrivacyStateRepository>((r
 final privacyFuseControllerProvider = FutureProvider<PrivacyFuseController>((ref) async {
   final geofenceRepo = await ref.watch(geofenceRepositoryProvider.future);
   final privacyRepo = await ref.watch(privacyStateRepositoryProvider.future);
-  return PrivacyFuseController(geofenceRepo, privacyRepo);
+  final controller = PrivacyFuseController(geofenceRepo, privacyRepo);
+  // 自动调用 initialize，否则 initStatusNotifier 永远停留在 loading
+  await controller.initialize('home');
+  return controller;
 });
 
 /// 围栏列表 Provider（供 BuddyStatusCard / ChatInteractionController 使用）

@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:workmanager/workmanager.dart';
+// TODO(workmanager): workmanager 包已从 pubspec.yaml 移除（Kotlin 嵌入 API 不兼容）
+// 后续需升级到 workmanager 0.6+ 或迁移到 FlutterWorkManager
+// import 'package:workmanager/workmanager.dart';
 
 import 'package:location_chat_app/core/location/location_strategy.dart';
 
@@ -53,21 +55,20 @@ class AndroidBackgroundService {
     );
 
     // 2. 初始化 WorkManager（App 被杀后的兜底）
-    await Workmanager().initialize(
-      _wmCallbackDispatcher,
-      isInDebugMode: kDebugMode,
-    );
+    // TODO(workmanager): 待重新集成 workmanager 0.6+
+    // await Workmanager().initialize(
+    //   _wmCallbackDispatcher,
+    //   isInDebugMode: kDebugMode,
+    // );
 
     debugPrint(
         '[AndroidBackgroundService] Initialized (flutter_foreground_task + workmanager)');
   }
 
   /// 初始化 WorkManager（由 LocationService 调用）
+  /// TODO(workmanager): 待重新集成 workmanager 0.6+
   static Future<void> initWorkManager() async {
-    await Workmanager().initialize(
-      _wmCallbackDispatcher,
-      isInDebugMode: kDebugMode,
-    );
+    debugPrint('[AndroidBackgroundService] initWorkManager: workmanager 未集成，跳过');
   }
 
   // ── 前台服务控制 ─────────────────────────────────────
@@ -124,62 +125,30 @@ class AndroidBackgroundService {
   // ── WorkManager 兜底任务 ─────────────────────────────
 
   /// 注册 WorkManager 周期性任务（App 被 kill 后自动恢复）
+  /// TODO(workmanager): 待重新集成 workmanager 0.6+
   static Future<void> registerPeriodicTask() async {
     if (!Platform.isAndroid) return;
-
-    await Workmanager().registerPeriodicTask(
-      _wmTaskName, // uniqueName
-      _wmTaskName, // taskName
-      frequency: const Duration(minutes: 15),
-      constraints: Constraints(
-        networkType: NetworkType.connected,
-        requiresBatteryNotLow: false,
-        requiresCharging: false,
-      ),
-      existingWorkPolicy: ExistingWorkPolicy.replace,
-      backoffPolicy: BackoffPolicy.exponential,
-      backoffPolicyDelay: const Duration(minutes: 5),
-    );
-
-    debugPrint(
-        '[AndroidBackgroundService] WorkManager periodic task registered');
+    debugPrint('[AndroidBackgroundService] registerPeriodicTask: workmanager 未集成，跳过');
   }
 
   /// 取消 WorkManager 周期性任务
+  /// TODO(workmanager): 待重新集成 workmanager 0.6+
   static Future<void> cancelPeriodicTask() async {
     if (!Platform.isAndroid) return;
-    await Workmanager().cancelByUniqueName(_wmTaskName);
-    debugPrint(
-        '[AndroidBackgroundService] WorkManager periodic task cancelled');
+    debugPrint('[AndroidBackgroundService] cancelPeriodicTask: workmanager 未集成，跳过');
   }
 
   // ── 内部回调 ─────────────────────────────────────────
 
   /// WorkManager 回调分发器（在独立 isolate 中执行）
+  /// TODO(workmanager): 待重新集成 workmanager 0.6+
   @pragma('vm:entry-point')
   static void _wmCallbackDispatcher() {
-    Workmanager().executeTask((task, inputData) async {
-      debugPrint(
-          '[AndroidBackgroundService] WorkManager task executed: $task');
-
-      if (task == _wmTaskName) {
-        // 尝试获取一次位置（作为兜底，不阻塞主逻辑）
-        try {
-          final position = await Geolocator.getCurrentPosition(
-            desiredAccuracy: LocationAccuracy.medium,
-            timeLimit: const Duration(seconds: 30),
-          );
-          debugPrint(
-              '[AndroidBackgroundService] WorkManager location: ${position.latitude}, ${position.longitude}');
-        } catch (e) {
-          debugPrint(
-              '[AndroidBackgroundService] WorkManager location failed: $e');
-        }
-      }
-
-      // true = 任务成功，false = 失败（会重试）
-      return true;
-    });
+    debugPrint('[AndroidBackgroundService] _wmCallbackDispatcher: workmanager 未集成，空实现');
+    // Workmanager().executeTask((task, inputData) async {
+    //   ...原逻辑保留待恢复...
+    //   return true;
+    // });
   }
 }
 

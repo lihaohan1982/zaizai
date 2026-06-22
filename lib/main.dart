@@ -16,23 +16,49 @@ import 'features/profile/pages/privacy_settings_page.dart';
 import 'demo/location_demo.dart';
 
 void main() async {
+  final mainStart = DateTime.now();
+
   // ① 在 runZonedGuarded 内部完成所有初始化，同一 zone
   await runZonedGuarded(
     () async {
-      // 绑定初始化（必须在任何 Flutter API 之前）
+      // ── 探针 ① 绑定初始化 ──
+      debugPrint('[启动] ① WidgetsFlutterBinding.ensureInitialized 开始 ${DateTime.now()}');
       WidgetsFlutterBinding.ensureInitialized();
+      debugPrint('[启动] ① 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
 
       // Flutter 框架异常捕获
       FlutterError.onError = _handleFlutterError;
 
-      // Hive + 环境配置
+      // ── 探针 ② Hive 初始化 ──
+      debugPrint('[启动] ② Hive.initFlutter 开始');
       await Hive.initFlutter();
-      await EnvConfig.load();
+      debugPrint('[启动] ② 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
 
-      // Sentry 崩溃监控（Phase 1）
-      await SentryService.initialize();
+      // ── 探针 ③ 环境配置加载 ──
+      debugPrint('[启动] ③ EnvConfig.load 开始');
+      try {
+        await EnvConfig.load();
+      } catch (e) {
+        debugPrint('[启动] ③ 异常: $e — 使用 fallback 继续启动');
+      }
+      debugPrint('[启动] ③ 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
 
-      // 启动 App
+      // ── 探针 ④ Sentry 崩溃监控（带 5 秒超时保护）──
+      debugPrint('[启动] ④ SentryService.initialize 开始');
+      try {
+        await SentryService.initialize().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint('[启动] ④ Sentry 初始化超时(5s)，跳过继续启动');
+          },
+        );
+      } catch (e) {
+        debugPrint('[启动] ④ Sentry 异常: $e — 跳过继续启动');
+      }
+      debugPrint('[启动] ④ 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+
+      // ── 探针 ⑤ 启动 App ──
+      debugPrint('[启动] ⑤ runApp 开始 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
       runApp(const ProviderScope(child: MyApp()));
     },
     (error, stack) => _handleUncaughtError(error, stack),
@@ -104,16 +130,15 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 
   Widget _buildRootPage() {
-    // 阶段 1：定位环境检测（权限 + 定位开关）
+    // 第一道门：EmptyStatePage 检测定位权限与服务状态
+    // 权限通过后 → _InitializationRouter 检查围栏/隐私初始化
     if (!_locationReady) {
       return EmptyStatePage(
         onReady: () {
-          if (mounted) setState(() => _locationReady = true);
+          setState(() => _locationReady = true);
         },
       );
     }
-
-    // 阶段 2：围栏初始化 → 决定显示引导页还是地图
     return _InitializationRouter();
   }
 
@@ -240,32 +265,9 @@ class _InitializationRouter extends ConsumerWidget {
               );
 
             case InitializationStatus.empty:
-              return Scaffold(
-                body: Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.add_location_alt, size: 64, color: Colors.blue),
-                      const SizedBox(height: 16),
-                      const Text(
-                        '创建你的第一个围栏',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('设置家或公司，开启位置共享'),
-                      const SizedBox(height: 32),
-                      FilledButton.icon(
-                        onPressed: () {
-                          // TODO: 跳转到围栏创建页面
-                          debugPrint('TODO: Navigate to FenceSetupPage');
-                        },
-                        icon: const Icon(Icons.add),
-                        label: const Text('创建围栏'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
+              // MVP 期间：空状态也进入地图页面（后续改为强制创建围栏）
+              // 用户可在地图页手动创建围栏
+              return const LocationDemoPage();
 
             case InitializationStatus.success:
               return const LocationDemoPage();

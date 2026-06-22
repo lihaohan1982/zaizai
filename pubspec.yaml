@@ -44,7 +44,8 @@ dependencies:
 
   # Background / Foreground Service
   flutter_foreground_task: ^8.10.1
-  workmanager: ^0.5.2
+  # package_info_plus ^8.0.0: Kotlin 1.9 compatible (overrides transitive from sentry_flutter)
+  package_info_plus: ^8.0.0
 
   # UI utilities
   qr_flutter: ^4.1.0

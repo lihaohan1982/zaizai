@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'dart:async';
+
 import 'package:geolocator/geolocator.dart';
 
 import 'package:location_chat_app/core/providers.dart';
@@ -62,14 +64,23 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
     super.dispose();
   }
 
-  /// 检查初始状态（权限 + 定位开关）
+  /// 检查初始状态（权限 + 定位开关 + 定位获取）
+  ///
+  /// 每个原生通道调用均带超时保护，防止模拟器/真机原生层卡死导致白屏。
   Future<void> _checkInitialState() async {
     if (!mounted) return;
 
-    // 1. 检查权限
-    final permission = await Geolocator.checkPermission();
-    if (!mounted) return;
+    // 1. 检查权限（带 5 秒超时）
+    LocationPermission permission;
+    try {
+      permission = await Geolocator.checkPermission()
+          .timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      debugPrint('[EmptyStatePage] checkPermission 超时(5s)，降级通过');
+      permission = LocationPermission.whileInUse; // 超时假设有权限
+    }
 
+    if (!mounted) return;
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       setState(() {
@@ -79,10 +90,17 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
       return;
     }
 
-    // 2. 检查定位开关
-    final isEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!mounted) return;
+    // 2. 检查定位开关（带 5 秒超时）
+    bool isEnabled;
+    try {
+      isEnabled = await Geolocator.isLocationServiceEnabled()
+          .timeout(const Duration(seconds: 5));
+    } on TimeoutException {
+      debugPrint('[EmptyStatePage] isLocationServiceEnabled 超时(5s)，假设已开启');
+      isEnabled = true;
+    }
 
+    if (!mounted) return;
     if (!isEnabled) {
       setState(() {
         _state = _EmptyState.locationOff;
@@ -91,7 +109,7 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
       return;
     }
 
-    // 3. 尝试获取一次定位，确认服务可用
+    // 3. 尝试获取一次定位，确认服务可用（10 秒超时）
     setState(() {
       _state = _EmptyState.loading;
       _message = '正在获取位置...';
@@ -110,11 +128,16 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
       });
       return;
     } catch (e) {
-      // 权限或其他错误：允许进入主界面（地图页会处理）
+      // 模拟器/弱网/超时：允许进入主界面（地图页会处理）
+      if (e is TimeoutException) {
+        debugPrint('[EmptyStatePage] 定位获取超时(10s)，继续进入主界面');
+      } else {
+        debugPrint('[EmptyStatePage] 定位获取异常: $e');
+      }
     }
 
     if (!mounted) return;
-    // 初始化成功
+    // 初始化成功 → 通知上层跳转到地图页
     widget.onReady?.call();
   }
 
@@ -123,7 +146,14 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
     if (_isRequesting) return;
     setState(() => _isRequesting = true);
 
-    final permission = await Geolocator.requestPermission();
+    LocationPermission permission;
+    try {
+      permission = await Geolocator.requestPermission()
+          .timeout(const Duration(seconds: 10));
+    } on TimeoutException {
+      debugPrint('[EmptyStatePage] requestPermission 超时');
+      permission = LocationPermission.denied;
+    }
     if (!mounted) return;
 
     if (permission == LocationPermission.denied ||
