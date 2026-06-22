@@ -45,7 +45,19 @@ class SideDrawerContent extends StatelessWidget {
 
           const Divider(color: Colors.white24, height: 1),
 
-          // 4. 隐私设置入口
+          // 4. 添加好友入口
+          ListTile(
+            leading: const Icon(Icons.person_add, color: Colors.white70),
+            title: const Text('添加好友',
+                style: TextStyle(color: Colors.white, fontSize: 15)),
+            trailing: const Icon(Icons.chevron_right, color: Colors.white54),
+            onTap: () {
+              onClose();
+              Navigator.pushNamed(context, '/add-friend');
+            },
+          ),
+
+          // 5. 隐私设置入口
           ListTile(
             leading: const Icon(Icons.lock_outline, color: Colors.white70),
             title: const Text('隐私与位置设置',

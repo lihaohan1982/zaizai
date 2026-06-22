@@ -1,119 +1,217 @@
+// lib/demo/location_demo.dart
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../core/location/location_providers.dart';
 import '../core/providers.dart';
+import '../core/privacy/privacy_fuse_controller.dart';
+import '../features/chat/widgets/side_drawer.dart';
+import '../features/chat/widgets/side_drawer_content.dart';
 import '../features/map/presentation/widgets/geofence_status_indicator.dart';
+import '../features/map/presentation/widgets/location_map.dart';
 
-/// 定位 Demo 页面（任务 1.2 验证）
+/// 主页面（地图 + 侧边栏 + 好友互动入口）
 ///
-/// P4-W4 改造：
-/// 1. 所有定位状态（服务、权限、位置流）全部下沉到 Riverpod Provider。
-/// 2. 页面本身为纯 View 层，ConsumerWidget，无 setState。
-/// 3. 刷新按钮通过 `ref.invalidate` 重新触发权限/位置流。
-class LocationDemoPage extends ConsumerWidget {
+/// 核心职责：
+/// 1. 地图渲染（flutter_map + OSM瓦片 + 围栏Polygon）
+/// 2. 实时位置跟踪（positionStreamProvider → 地图中心跟随）
+/// 3. 侧边栏导航（好友列表 → InteractionSheet / 隐私设置）
+/// 4. 系统时间显示（AppBar）
+/// 5. 围栏状态指示器（AppBar）
+class LocationDemoPage extends ConsumerStatefulWidget {
   const LocationDemoPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final status = ref.watch(locationDemoStatusProvider);
+  ConsumerState<LocationDemoPage> createState() => _LocationDemoPageState();
+}
+
+class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
+  bool _drawerOpen = false;
+  final MapController _mapController = MapController();
+  bool _mapInitialized = false;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _openDrawer() => setState(() => _drawerOpen = true);
+  void _closeDrawer() => setState(() => _drawerOpen = false);
+
+  @override
+  Widget build(BuildContext context) {
     final positionAsync = ref.watch(positionStreamProvider);
+    final fencesAsync = ref.watch(fencesProvider);
+    final privacyAsync = ref.watch(privacyFuseControllerProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('定位 Demo'),
+        title: const Text('定位陪伴'),
         actions: [
-          // 围栏状态指示器（监听 PrivacyFuseController）
-          Consumer(
-            builder: (context, ref, _) {
-              final privacyAsync = ref.watch(privacyFuseControllerProvider);
-              return privacyAsync.when(
-                data: (controller) => GeofenceStatusIndicator(
-                  stateMachine: null, // MVP 期间不展示围栏状态
-                  controller: controller,
-                ),
-                loading: () => const SizedBox.shrink(),
-                error: (_, __) => const SizedBox.shrink(),
-              );
-            },
+          // 系统时间显示
+          _SystemTimeButton(),
+          // 围栏状态指示器
+          privacyAsync.when(
+            data: (controller) => GeofenceStatusIndicator(
+              stateMachine: null,
+              controller: controller,
+            ),
+            loading: () => const SizedBox(width: 16),
+            error: (_, __) => const SizedBox(width: 16),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 状态显示
-            Text(
-              status,
-              style: TextStyle(
-                fontSize: 16,
-                color: status.contains('❌') ? Colors.red : Colors.green,
-              ),
-            ),
-            const SizedBox(height: 20),
+      body: Stack(
+        children: [
+          // 地图层
+          _buildMap(positionAsync, fencesAsync, privacyAsync),
 
-            // 位置信息显示
-            positionAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(),
-              ),
-              error: (err, stack) => Text(
-                '位置流错误: $err',
-                style: const TextStyle(color: Colors.red),
-              ),
-              data: (position) => _buildPositionInfo(position),
+          // 侧边栏（叠加层，非 Drawer widget）
+          SideDrawer(
+            isOpen: _drawerOpen,
+            onClose: _closeDrawer,
+            child: SideDrawerContent(
+              onClose: _closeDrawer,
+              onPrivacySettingsTap: () {
+                Navigator.pushNamed(context, '/privacy-settings');
+              },
+            ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openDrawer,
+        tooltip: '打开好友列表',
+        child: const Icon(Icons.people),
+      ),
+    );
+  }
+
+  Widget _buildMap(
+    AsyncValue<Position> positionAsync,
+    AsyncValue<List<Map<String, dynamic>>> fencesAsync,
+    AsyncValue<PrivacyFuseController> privacyAsync,
+  ) {
+    return positionAsync.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (err, _) => Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.location_off, size: 48, color: Colors.red),
+            const SizedBox(height: 12),
+            Text('定位失败: $err', style: const TextStyle(color: Colors.red)),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => ref.invalidate(positionStreamProvider),
+              child: const Text('重试'),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // 刷新所有定位相关 Provider，重新触发权限请求和位置流
-          ref.invalidate(locationServiceEnabledProvider);
-          ref.invalidate(locationPermissionProvider);
-          ref.invalidate(positionStreamProvider);
-        },
-        tooltip: '重新获取位置',
-        child: const Icon(Icons.refresh),
-      ),
+      data: (position) {
+        final lat = position.latitude;
+        final lon = position.longitude;
+
+        // 首次获取位置时移动地图中心
+        if (!_mapInitialized) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _mapController.move(LatLng(lat, lon), 15);
+              _mapInitialized = true;
+            }
+          });
+        }
+
+        // 围栏列表和隐私控制器（给 LocationMap 使用）
+        final fences = fencesAsync.valueOrNull ?? [];
+        final controller = privacyAsync.valueOrNull;
+
+        if (controller == null) {
+          // 隐私控制器尚未就绪，先显示纯地图
+          return FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: LatLng(lat, lon),
+              initialZoom: 15,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate:
+                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName:
+                    'com.locationchat.location_chat_app',
+              ),
+            ],
+          );
+        }
+
+        return LocationMap(
+          fences: fences,
+          triggeredFenceId: null,
+          privacyController: controller,
+        );
+      },
     );
   }
+}
 
-  Widget _buildPositionInfo(Position position) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildInfoRow('纬度', '${position.latitude.toStringAsFixed(6)}°'),
-        _buildInfoRow('经度', '${position.longitude.toStringAsFixed(6)}°'),
-        _buildInfoRow('精度', '${position.accuracy.toStringAsFixed(1)} 米'),
-        _buildInfoRow('海拔', '${position.altitude.toStringAsFixed(1)} 米'),
-        _buildInfoRow('速度', '${position.speed.toStringAsFixed(1)} 米/秒'),
-        _buildInfoRow(
-          '时间戳',
-          '${position.timestamp.toLocal()}',
-        ),
-        const SizedBox(height: 20),
-        const Text(
-          '📍 位置已获取！可以尝试移动设备查看坐标变化。',
-          style: TextStyle(fontSize: 14, color: Colors.blue),
-        ),
-      ],
-    );
+/// 系统时间按钮（AppBar action）
+class _SystemTimeButton extends StatefulWidget {
+  @override
+  State<_SystemTimeButton> createState() => _SystemTimeButtonState();
+}
+
+class _SystemTimeButtonState extends State<_SystemTimeButton> {
+  late Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final timeStr =
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    return IconButton(
+      icon: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold)),
-          Expanded(child: Text(value)),
+          const Icon(Icons.access_time, size: 18),
+          const SizedBox(width: 2),
+          Text(timeStr, style: const TextStyle(fontSize: 14)),
         ],
       ),
+      tooltip: '系统时间',
+      onPressed: () {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '当前系统时间: ${now.toString().substring(0, 19)}',
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
     );
   }
 }

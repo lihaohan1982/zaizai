@@ -9,6 +9,7 @@ import 'core/config/env_config.dart';
 import 'core/monitoring/sentry_service.dart';
 import 'core/privacy/privacy_fuse_controller.dart';
 import 'core/providers.dart';
+import 'features/chat/pages/add_friend_page.dart';
 import 'features/chat/pages/interaction_sheet.dart';
 import 'features/fence/pages/fence_event_history_page.dart';
 import 'features/map/presentation/pages/empty_state_page.dart';
@@ -151,6 +152,14 @@ class _MyAppState extends ConsumerState<MyApp> {
   Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
     final name = settings.name;
     if (name == null) return null;
+
+    // /add-friend
+    if (name == '/add-friend') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const AddFriendPage(),
+      );
+    }
 
     // /interaction/:friendId
     if (name.startsWith('/interaction/')) {
