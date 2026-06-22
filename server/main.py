@@ -150,6 +150,18 @@ def friend_row(row) -> dict:
     }
 
 
+def request_row(row) -> dict:
+    return {
+        "friendship_id": row[0],
+        "id": row[1],
+        "phone": row[2],
+        "nickname": row[3] or "未知",
+        "avatar_url": row[4] or "",
+        "status": row[5],
+        "initiator_id": row[6],
+    }
+
+
 @app.get("/api/friends")
 async def get_friends(token: str = Query(...)):
     user_id = await redis_client.get(f"token:{token}") if redis_client else None
@@ -177,7 +189,7 @@ async def get_requests(token: str = Query(...)):
     async with pool.acquire() as conn:
         async with conn.cursor() as cur:
             await cur.execute(
-                """SELECT u.id, u.phone, u.nickname, u.avatar_url, f.status, f.initiator_id
+                """SELECT f.id, u.id, u.phone, u.nickname, u.avatar_url, f.status, f.initiator_id
                 FROM friendships f
                 JOIN users u ON u.id = f.initiator_id
                 WHERE (f.user_id_1 = %s OR f.user_id_2 = %s) AND f.status = 'pending'
@@ -185,7 +197,7 @@ async def get_requests(token: str = Query(...)):
                 (user_id, user_id),
             )
             rows = await cur.fetchall()
-    return json_response([friend_row(r) for r in rows])
+    return json_response([request_row(r) for r in rows])
 
 
 @app.get("/api/friends/add")
@@ -230,6 +242,20 @@ async def accept_friend(token: str = Query(...), friendship_id: str = Query(...)
                 (friendship_id, user_id, user_id),
             )
     return json_response({"status": "accepted"})
+
+
+@app.get("/api/friends/reject")
+async def reject_friend(token: str = Query(...), friendship_id: str = Query(...)):
+    user_id = await redis_client.get(f"token:{token}") if redis_client else None
+    if not user_id:
+        raise HTTPException(status_code=401, detail="未授权")
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "UPDATE friendships SET status='rejected' WHERE id=%s AND (user_id_1=%s OR user_id_2=%s) AND status='pending'",
+                (friendship_id, user_id, user_id),
+            )
+    return json_response({"status": "rejected"})
 
 
 # ============ Geofences ============

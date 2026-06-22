@@ -6,12 +6,11 @@ import 'package:location_chat_app/core/providers.dart';
 
 /// 添加好友页面（搜索手机号 + 发送请求）
 ///
-/// 后端 API：
-///   - POST /api/friends/search?phone=13800138000 → 搜索用户
-///   - POST /api/friends/request → 发送好友请求 {target_phone, message}
+/// 后端 API（全部 GET + Query）：
+///   - GET /api/friends/add?phone=xxx → 搜索+发送好友请求
 ///   - GET /api/friends/requests → 获取待处理请求列表
-///   - POST /api/friends/accept/:id → 接受请求
-///   - POST /api/friends/reject/:id → 拒绝请求
+///   - GET /api/friends/accept?friendship_id=xxx → 接受请求
+///   - GET /api/friends/reject?friendship_id=xxx → 拒绝请求
 class AddFriendPage extends ConsumerStatefulWidget {
   const AddFriendPage({super.key});
 
@@ -110,7 +109,7 @@ class _AddFriendPageState extends ConsumerState<AddFriendPage> {
                   ? const SizedBox(
                       width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.search),
-              label: Text(_searching ? '搜索中...' : '搜索用户'),
+              label: Text(_searching ? '发送中...' : '搜索并添加'),
             ),
             if (_error != null)
               Padding(
@@ -190,12 +189,16 @@ class _FriendRequestsList extends ConsumerWidget {
                     IconButton(
                       icon: const Icon(Icons.check, color: Colors.green),
                       tooltip: '接受',
-                      onPressed: id != null ? () => _handleRequest(ref, id, true) : null,
+                      onPressed: id != null
+                          ? () => _handleRequest(ref, req['friendship_id']?.toString() ?? id, true)
+                          : null,
                     ),
                     IconButton(
                       icon: const Icon(Icons.close, color: Colors.red),
                       tooltip: '拒绝',
-                      onPressed: id != null ? () => _handleRequest(ref, id, false) : null,
+                      onPressed: id != null
+                          ? () => _handleRequest(ref, req['friendship_id']?.toString() ?? id, false)
+                          : null,
                     ),
                   ],
                 ),
@@ -210,9 +213,9 @@ class _FriendRequestsList extends ConsumerWidget {
   Future<void> _handleRequest(WidgetRef ref, String requestId, bool accept) async {
     try {
       final dioClient = ref.read(dioClientProvider);
-      // 后端用 GET /api/friends/accept?friendship_id=xxx
+      final endpoint = accept ? '/api/friends/accept' : '/api/friends/reject';
       final response = await dioClient.dio.get(
-        '/api/friends/accept',
+        endpoint,
         queryParameters: {'friendship_id': requestId},
       );
       final wrapper = response.data as Map<String, dynamic>;
