@@ -14,6 +14,7 @@ import '../features/chat/widgets/side_drawer.dart';
 import '../features/chat/widgets/side_drawer_content.dart';
 import '../features/map/presentation/widgets/geofence_status_indicator.dart';
 import '../features/map/presentation/widgets/location_map.dart';
+import '../features/fence/presentation/create_geofence_sheet.dart';
 
 /// 主页面（地图 + 侧边栏 + 好友互动入口）
 ///
@@ -34,6 +35,8 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
   bool _drawerOpen = false;
   final MapController _mapController = MapController();
   bool _mapInitialized = false;
+  double? _currentLat;
+  double? _currentLng;
 
   @override
   void dispose() {
@@ -43,6 +46,18 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
 
   void _openDrawer() => setState(() => _drawerOpen = true);
   void _closeDrawer() => setState(() => _drawerOpen = false);
+
+  void _showCreateGeofenceSheet() {
+    if (_currentLat == null || _currentLng == null) return;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => CreateGeofenceSheet(
+        lat: _currentLat!,
+        lng: _currentLng!,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -86,10 +101,28 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openDrawer,
-        tooltip: '打开好友列表',
-        child: const Icon(Icons.people),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // 围栏创建按钮
+          FloatingActionButton(
+            heroTag: 'create_fence',
+            onPressed: _currentLat != null
+                ? () => _showCreateGeofenceSheet()
+                : null,
+            tooltip: '创建围栏',
+            child: const Icon(Icons.add_location_alt),
+          ),
+          const SizedBox(height: 12),
+          // 好友列表按钮
+          FloatingActionButton(
+            heroTag: 'open_drawer',
+            onPressed: _openDrawer,
+            tooltip: '打开好友列表',
+            child: const Icon(Icons.people),
+          ),
+        ],
       ),
     );
   }
@@ -119,6 +152,8 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
       data: (position) {
         final lat = position.latitude;
         final lon = position.longitude;
+        _currentLat = lat;
+        _currentLng = lon;
 
         // 首次获取位置时移动地图中心
         if (!_mapInitialized) {

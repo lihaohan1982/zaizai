@@ -233,6 +233,27 @@ async def accept_friend(token: str = Query(...), friendship_id: str = Query(...)
 
 
 # ============ Geofences ============
+@app.get("/api/geofences/create")
+async def create_geofence(
+    token: str = Query(...),
+    name: str = Query(...),
+    lat: float = Query(...),
+    lng: float = Query(...),
+    radius: float = Query(default=100),
+):
+    user_id = await redis_client.get(f"token:{token}") if redis_client else None
+    if not user_id:
+        raise HTTPException(status_code=401, detail="未授权")
+    fid = str(uuid.uuid4())
+    async with pool.acquire() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO geo_fences (id, user_id, name, lat, lng, radius) VALUES (%s,%s,%s,%s,%s,%s)",
+                (fid, user_id, name, lat, lng, radius),
+            )
+    return json_response({"id": fid, "name": name, "lat": lat, "lng": lng, "radius": radius})
+
+
 @app.get("/api/geofences")
 async def get_geofences(token: str = Query(...)):
     user_id = await redis_client.get(f"token:{token}") if redis_client else None

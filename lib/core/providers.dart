@@ -132,8 +132,23 @@ final privacyFuseControllerProvider = FutureProvider<PrivacyFuseController>((ref
   return controller;
 });
 
-/// 围栏列表 Provider（供 BuddyStatusCard / ChatInteractionController 使用）
+/// 围栏列表 Provider（从后端 API /api/geofences 获取）
+///
+/// 后端返回字段：id, name, lat, lng, radius
+/// LocationMap 组件期望字段：id, lat, lng, radius
 final fencesProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
+  final dioClient = ref.read(dioClientProvider);
+  try {
+    final response = await dioClient.dio.get('/api/geofences');
+    final wrapper = response.data as Map<String, dynamic>;
+    if (wrapper['code'] == 0) {
+      final List<dynamic> raw = wrapper['data'] ?? [];
+      return raw.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    }
+  } catch (e) {
+    debugPrint('[Fences] API 加载失败，回退 mock: $e');
+  }
+  // 回退：API 失败时从 mock JSON 加载
   final jsonString = await rootBundle.loadString('assets/mock_fences.json');
   final List<dynamic> json = jsonDecode(jsonString);
   return json.cast<Map<String, dynamic>>();
