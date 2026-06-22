@@ -169,14 +169,39 @@ final scaffoldMessengerKeyProvider = Provider<GlobalKey<ScaffoldMessengerState>>
 // Friend List
 // -------------------------------------------------------------------------
 
-/// 好友列表 Provider（从 assets  mock 数据读取，MVP 阶段展示真实数据结构）
+/// 好友列表 Provider（P0-1：从 FastAPI /api/friends 真实 API 读取）
+///
+/// 字段归一化：API 返回 nickname → 转换为 name，供 SideDrawerFriendList 使用。
+/// 定位服务字段（locationDesc / battery）后端暂无，填充为空占位。
 final friendListProvider = FutureProvider<List<Map<String, dynamic>>>((ref) async {
   final auth = ref.watch(authStateProvider);
   if (!auth.isLoggedIn) return [];
 
-  final jsonString = await rootBundle.loadString('assets/mock_friends.json');
-  final List<dynamic> json = jsonDecode(jsonString);
-  return json.cast<Map<String, dynamic>>();
+  final dioClient = ref.watch(dioClientProvider);
+
+  try {
+    final response = await dioClient.dio.get('/api/friends');
+    final wrapper = response.data as Map<String, dynamic>;
+    final code = wrapper['code'] as int?;
+    if (code != 0) {
+      debugPrint('[FriendList] API 返回错误 code=$code: ${wrapper['message']}');
+      return [];
+    }
+
+    final List<dynamic> rawFriends = wrapper['data'] as List<dynamic>? ?? [];
+    // 字段归一化：API → Widget 期望
+    return rawFriends.map((f) {
+      final Map<String, dynamic> friend = Map<String, dynamic>.from(f as Map);
+      friend['name'] = friend['nickname'] ?? friend['phone'] ?? '未知';
+      // 后端暂无实时位置数据，Widget 需要这些字段
+      friend['locationDesc'] = friend['locationDesc'] ?? '';
+      friend['battery'] = friend['battery'];
+      return friend;
+    }).toList();
+  } catch (e, st) {
+    debugPrint('[FriendList] 加载好友列表失败: $e\n$st');
+    return [];
+  }
 });
 
 // -------------------------------------------------------------------------
