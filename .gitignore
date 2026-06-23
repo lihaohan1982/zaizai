@@ -46,6 +46,5 @@ app.*.map.json
 node_modules/
 
 # Environment / secrets
-.env
 .env.local
 .env.*.local
