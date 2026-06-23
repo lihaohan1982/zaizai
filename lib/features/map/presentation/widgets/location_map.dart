@@ -132,10 +132,9 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // ArcGIS World Street Map（全球CDN，国内手机网络可访问）
+            // OSM 德国镜像（已在中国手机网络验证可达）
             TileLayer(
-              urlTemplate:
-                  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+              urlTemplate: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.locationchat.location_chat_app',
             ),
             // 围栏多边形
