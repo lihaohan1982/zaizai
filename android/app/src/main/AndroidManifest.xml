@@ -19,7 +19,9 @@
     <application
         android:label="location_chat_app"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true"
+        android:networkSecurityConfig="@xml/network_security_config">
         <!-- 高德地图 API Key (injected from local.properties / env var) -->
         <meta-data
             android:name="com.amap.api.v2.apikey"
