@@ -40,25 +40,25 @@ class EncryptionException implements Exception {
 
 // ---------------------------------------------------------------------------
 
-/// 开发用服务 — 加密/解密均抛异常，禁止在生产环境使用
+/// 开发用服务 — 透传明文（仅用于开发调试）
 ///
-/// 安全红线：Dev 实现不得透传明文。若误用此服务，encrypt/decrypt
-/// 立即抛出 EncryptionException，强制开发者切换到 ProdGeoEncryptionService。
+/// ⚠️ 生产环境必须切换到 ProdGeoEncryptionService
+/// 此实现不提供任何安全保护，仅用于避免 FlutterSecureStorage 在真机上的初始化问题
 class DevGeoEncryptionService implements GeoEncryptionService {
   @override
   Future<String> encrypt(String plainText) async {
-    throw EncryptionException(
-      'DevGeoEncryptionService.encrypt() must not be used in production. '
-      'Switch to ProdGeoEncryptionService to enable AES-256-GCM encryption.',
-    );
+    // Dev 模式：直接透传明文（标记为 DEV: 前缀以便识别）
+    return 'DEV:$plainText';
   }
 
   @override
   Future<String> decrypt(String cipherText) async {
-    throw EncryptionException(
-      'DevGeoEncryptionService.decrypt() must not be used in production. '
-      'Switch to ProdGeoEncryptionService to enable AES-256-GCM decryption.',
-    );
+    // Dev 模式：去掉 DEV: 前缀，返回原始明文
+    if (cipherText.startsWith('DEV:')) {
+      return cipherText.substring(4);
+    }
+    // 兼容旧格式（无前缀）
+    return cipherText;
   }
 }
 

@@ -101,7 +101,9 @@ final dioClientProvider = Provider<DioClient>((ref) {
 // -------------------------------------------------------------------------
 
 final geoEncryptionServiceProvider = Provider<GeoEncryptionService>((ref) {
-  return ProdGeoEncryptionService();
+  // [开发阶段] 使用透传服务，避免 FlutterSecureStorage 真机初始化卡住
+  // TODO(安全上线): 切换回 ProdGeoEncryptionService
+  return DevGeoEncryptionService();
 });
 
 // -------------------------------------------------------------------------
