@@ -135,7 +135,7 @@ class _LocationMapState extends State<LocationMap>
             // ArcGIS World Street Map（全球CDN，国内手机网络可访问）
             TileLayer(
               urlTemplate:
-                  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{x}/{y}',
+                  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
               userAgentPackageName: 'com.locationchat.location_chat_app',
             ),
             // 围栏多边形
