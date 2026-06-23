@@ -179,9 +179,10 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
             ),
             children: [
               TileLayer(
-                // 国内可访问的 OSM 德国镜像
+                // 腾讯地图瓦片（国内CDN，稳定可访问）
                 urlTemplate:
-                    'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+                    'https://rt{s}.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=4&scene=0',
+                subdomains: const ['0', '1', '2', '3'],
                 userAgentPackageName:
                     'com.locationchat.location_chat_app',
                 tileProvider: NetworkTileProvider(),

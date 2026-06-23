@@ -132,9 +132,10 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // OSM 德国镜像（国内可访问）
+            // 腾讯地图瓦片（国内CDN，稳定可访问）
             TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+              urlTemplate: 'https://rt{s}.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=4&scene=0',
+              subdomains: const ['0', '1', '2', '3'],
               userAgentPackageName: 'com.locationchat.location_chat_app',
             ),
             // 围栏多边形
