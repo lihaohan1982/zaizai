@@ -179,10 +179,13 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
             ),
             children: [
               TileLayer(
+                // 使用国内可访问的瓦片源（GeoQ，无需鉴权）
                 urlTemplate:
-                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+                subdomains: const ['1', '2', '3', '4'],
                 userAgentPackageName:
                     'com.locationchat.location_chat_app',
+                tileProvider: NetworkTileProvider(),
               ),
             ],
           );
