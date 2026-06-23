@@ -132,10 +132,10 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // 腾讯地图瓦片（国内CDN，稳定可访问）
+            // ArcGIS World Street Map（全球CDN，国内手机网络可访问）
             TileLayer(
-              urlTemplate: 'https://rt{s}.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=4&scene=0',
-              subdomains: const ['0', '1', '2', '3'],
+              urlTemplate:
+                  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{x}/{y}',
               userAgentPackageName: 'com.locationchat.location_chat_app',
             ),
             // 围栏多边形

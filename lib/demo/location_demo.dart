@@ -179,10 +179,9 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
             ),
             children: [
               TileLayer(
-                // 腾讯地图瓦片（国内CDN，稳定可访问）
+                // ArcGIS World Street Map（全球CDN，国内手机网络可访问）
                 urlTemplate:
-                    'https://rt{s}.map.gtimg.com/tile?z={z}&x={x}&y={y}&styleid=4&scene=0',
-                subdomains: const ['0', '1', '2', '3'],
+                    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{x}/{y}',
                 userAgentPackageName:
                     'com.locationchat.location_chat_app',
                 tileProvider: NetworkTileProvider(),
