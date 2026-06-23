@@ -1,4 +1,8 @@
 // lib/demo/location_demo.dart
+//
+// ⚠️ 诊断模式：DEBUG_FAKE_POSITION = true
+// 强制使用假GPS数据（北京），绕过所有权限和网络依赖
+// 用于验证：地图瓦片本身能否加载
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,14 +20,34 @@ import '../features/map/presentation/widgets/geofence_status_indicator.dart';
 import '../features/map/presentation/widgets/location_map.dart';
 import '../features/fence/presentation/create_geofence_sheet.dart';
 
+/// ⚠️ 诊断模式开关：true = 强制假GPS（跳过所有权限和网络依赖）
+const bool DEBUG_FAKE_POSITION = true;
+
+/// 诊断用假GPS流：每3秒发一个北京天安门的固定坐标
+Stream<Position> _fakePositionStream() {
+  return Stream.periodic(const Duration(seconds: 3), (count) {
+    // ignore: invalid_use_of_visible_for_testing_member
+    return Position(
+      latitude: 39.909187,
+      longitude: 116.397451,
+      timestamp: DateTime.now(),
+      accuracy: 10.0,
+      altitude: 50.0,
+      altitudeAccuracy: 5.0,
+      heading: 0.0,
+      headingAccuracy: 0.0,
+      speed: 0.0,
+      speedAccuracy: 0.0,
+    );
+  });
+}
+
+/// 诊断用假GPS的 StreamProvider
+final _fakePositionStreamProvider = StreamProvider<Position>((ref) {
+  return _fakePositionStream();
+});
+
 /// 主页面（地图 + 侧边栏 + 好友互动入口）
-///
-/// 核心职责：
-/// 1. 地图渲染（flutter_map + OSM瓦片 + 围栏Polygon）
-/// 2. 实时位置跟踪（positionStreamProvider → 地图中心跟随）
-/// 3. 侧边栏导航（好友列表 → InteractionSheet / 隐私设置）
-/// 4. 系统时间显示（AppBar）
-/// 5. 围栏状态指示器（AppBar）
 class LocationDemoPage extends ConsumerStatefulWidget {
   const LocationDemoPage({super.key});
 
@@ -61,17 +85,18 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
 
   @override
   Widget build(BuildContext context) {
-    final positionAsync = ref.watch(positionStreamProvider);
+    // 诊断模式：强制用假GPS数据，否则用真实数据
+    final positionAsync = DEBUG_FAKE_POSITION
+        ? ref.watch(_fakePositionStreamProvider)
+        : ref.watch(positionStreamProvider);
     final fencesAsync = ref.watch(fencesProvider);
     final privacyAsync = ref.watch(privacyFuseControllerProvider);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('定位陪伴'),
+        title: Text(DEBUG_FAKE_POSITION ? '🔧 诊断模式：假GPS' : '定位陪伴'),
         actions: [
-          // 系统时间显示
           _SystemTimeButton(),
-          // 围栏状态指示器
           privacyAsync.when(
             data: (controller) => GeofenceStatusIndicator(
               stateMachine: null,
@@ -85,13 +110,10 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
       ),
       body: Stack(
         children: [
-          // 地图层
           _buildMap(positionAsync, fencesAsync, privacyAsync),
-
-          // 侧边栏（叠加层，非 Drawer widget）
           SideDrawer(
             isOpen: _drawerOpen,
-            onClose: _closeDrawer,
+            onClose: _drawerOpen ? _closeDrawer : () {},
             child: SideDrawerContent(
               onClose: _closeDrawer,
               onPrivacySettingsTap: () {
@@ -105,7 +127,6 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
         mainAxisAlignment: MainAxisAlignment.end,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          // 围栏创建按钮
           FloatingActionButton(
             heroTag: 'create_fence',
             onPressed: _currentLat != null
@@ -115,7 +136,6 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
             child: const Icon(Icons.add_location_alt),
           ),
           const SizedBox(height: 12),
-          // 好友列表按钮
           FloatingActionButton(
             heroTag: 'open_drawer',
             onPressed: _openDrawer,
@@ -140,10 +160,20 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
           children: [
             const Icon(Icons.location_off, size: 48, color: Colors.red),
             const SizedBox(height: 12),
-            Text('定位失败: $err', style: const TextStyle(color: Colors.red)),
+            Text(
+              '定位失败: $err',
+              style: const TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
             const SizedBox(height: 12),
             ElevatedButton(
-              onPressed: () => ref.invalidate(positionStreamProvider),
+              onPressed: () {
+                if (DEBUG_FAKE_POSITION) {
+                  ref.invalidate(_fakePositionStreamProvider);
+                } else {
+                  ref.invalidate(positionStreamProvider);
+                }
+              },
               child: const Text('重试'),
             ),
           ],
@@ -155,7 +185,6 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
         _currentLat = lat;
         _currentLng = lon;
 
-        // 首次获取位置时移动地图中心
         if (!_mapInitialized) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -165,12 +194,10 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
           });
         }
 
-        // 围栏列表和隐私控制器（给 LocationMap 使用）
         final fences = fencesAsync.valueOrNull ?? [];
         final controller = privacyAsync.valueOrNull;
 
         if (controller == null) {
-          // 隐私控制器尚未就绪，先显示纯地图
           return FlutterMap(
             mapController: _mapController,
             options: MapOptions(
@@ -179,7 +206,6 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
             ),
             children: [
               TileLayer(
-                // ArcGIS World Street Map（全球CDN，国内手机网络可访问）
                 urlTemplate:
                     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{x}/{y}',
                 userAgentPackageName:
@@ -200,7 +226,6 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
   }
 }
 
-/// 系统时间按钮（AppBar action）
 class _SystemTimeButton extends StatefulWidget {
   @override
   State<_SystemTimeButton> createState() => _SystemTimeButtonState();
