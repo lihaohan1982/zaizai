@@ -110,7 +110,9 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
       ),
       body: Stack(
         children: [
-          _buildMap(positionAsync, fencesAsync, privacyAsync),
+          Positioned.fill(
+            child: _buildMap(positionAsync, fencesAsync, privacyAsync),
+          ),
           SideDrawer(
             isOpen: _drawerOpen,
             onClose: _drawerOpen ? _closeDrawer : () {},
