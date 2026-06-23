@@ -132,10 +132,9 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // 高德瓦片图层（国内可访问，无需鉴权）
+            // OSM 德国镜像（国内可访问）
             TileLayer(
-              urlTemplate: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-              subdomains: const ['1', '2', '3', '4'],
+              urlTemplate: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.locationchat.location_chat_app',
             ),
             // 围栏多边形
