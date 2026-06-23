@@ -22,12 +22,13 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      # 3. 配置 Flutter 环境（⚠️ beta 通道包含 Dart 3.8.x）
+      # 3. 配置 Flutter 环境
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: 'beta'
-          cache: true
+          channel: 'stable'
+          flutter-version: '3.32.4'
+          cache: false  # 禁用缓存，避免版本残留
 
       # 4. 验证版本
       - name: Verify Flutter version
