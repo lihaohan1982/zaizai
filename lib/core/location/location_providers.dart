@@ -1,4 +1,3 @@
-import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -24,39 +23,36 @@ class LocationPermissionDeniedException implements Exception {
 
   @override
   String toString() => permanently
-      ? '定位权限被永久拒绝'
+      ? '定位权限被永久拒绝，请在系统设置中开启'
       : '定位权限被拒绝';
 }
 
 /// 持续位置流
 ///
-/// 依赖 [locationServiceEnabledProvider] 与 [locationPermissionProvider]，
-/// 只有服务启用且权限有效时才会真正订阅 Geolocator 流。
-final positionStreamProvider = StreamProvider<Position>((ref) {
-  final enabledAsync = ref.watch(locationServiceEnabledProvider);
-  final permissionAsync = ref.watch(locationPermissionProvider);
-
-  // 等待两个 Future 都完成
-  if (!enabledAsync.hasValue || !permissionAsync.hasValue) {
-    return const Stream.empty();
-  }
-
-  final enabled = enabledAsync.value!;
+/// 使用 async* 正确等待依赖 Future 完成后再订阅 GPS 流，
+/// 避免返回 Stream.empty() 导致 Provider 状态异常。
+final positionStreamProvider = StreamProvider<Position>((ref) async* {
+  // 正确方式：await 两个依赖 Future，确保它们完成后才进入 GPS 流
+  final enabled = await ref.watch(locationServiceEnabledProvider.future);
   if (!enabled) {
-    return Stream.error(const LocationPermissionDeniedException());
+    throw const LocationPermissionDeniedException();
   }
 
-  final permission = permissionAsync.value!;
+  final permission = await ref.watch(locationPermissionProvider.future);
   if (permission == LocationPermission.denied) {
-    return Stream.error(const LocationPermissionDeniedException());
+    throw const LocationPermissionDeniedException();
   }
   if (permission == LocationPermission.deniedForever) {
-    return Stream.error(
-      const LocationPermissionDeniedException(permanently: true),
-    );
+    throw const LocationPermissionDeniedException(permanently: true);
   }
 
-  return Geolocator.getPositionStream();
+  // 权限和服务都已就绪，开始监听 GPS 位置流
+  yield* Geolocator.getPositionStream(
+    locationSettings: const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 10, // 移动 10 米才更新，省电
+    ),
+  );
 });
 
 /// 定位 Demo 页面状态文案（综合服务、权限、位置流状态）
