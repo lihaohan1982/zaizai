@@ -132,10 +132,16 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // OpenStreetMap 官方源（全球通用）
+            // OSM 德国镜像 + 显式 User-Agent Header
             TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              urlTemplate: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.locationchat.location_chat_app',
+              tileProvider: NetworkTileProvider(
+                headers: {
+                  'User-Agent':
+                      'location_chat_app/1.0 (com.locationchat.location_chat_app)',
+                },
+              ),
             ),
             // 围栏多边形
             PolygonLayer(polygons: polygons.toList()),
