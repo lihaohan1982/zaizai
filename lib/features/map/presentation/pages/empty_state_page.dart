@@ -249,7 +249,7 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
   String get _titleText {
     switch (_state) {
       case _EmptyState.loading:
-        return '【诊断】准备就绪 - $_state';
+        return '正在初始化...';
       case _EmptyState.noPermission:
         return '需要定位权限';
       case _EmptyState.locationOff:

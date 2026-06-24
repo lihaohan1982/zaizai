@@ -73,14 +73,19 @@ class _LocationMapState extends State<LocationMap>
   /// 坐标转换：米 → 度
   ///   1°纬度 ≈ 111320m，1°经度 ≈ 111320m × cos(lat)
   ///   多边形顶点数 points 越多，圆越平滑（默认32点）
+  ///
+  /// 注意：LatLng.latitude / longitude 是十进制度（°）。
+  ///       cos() 需要弧度，先显式乘以 π/180 转换，
+  ///       最终加回的 dLatDeg/dLonDeg 也是度数，单位统一。
   List<LatLng> _generateCirclePoints(
     LatLng center,
     double radius, [
     int points = 32,
   ]) {
-    final latDegPerMeter = 1.0 / 111320.0;
-    final cosLat = math.cos(center.latitudeInRad);
-    final lonDegPerMeter = latDegPerMeter / (cosLat == 0 ? 1e-10 : cosLat);
+    const latDegPerMeter = 1.0 / 111320.0;
+    // center.latitude 是十进制度，cos() 需要弧度
+    final cosLat = math.cos(center.latitude * math.pi / 180.0);
+    final lonDegPerMeter = latDegPerMeter / (cosLat.abs() < 1e-10 ? 1e-10 : cosLat);
 
     return List.generate(points, (i) {
       final angle = 2 * math.pi * i / points;
@@ -88,9 +93,10 @@ class _LocationMapState extends State<LocationMap>
       final dy = radius * math.sin(angle); // 米（南北方向）
       final dLatDeg = dy * latDegPerMeter;
       final dLonDeg = dx * lonDegPerMeter;
+      // 基准坐标用十进制度（°），与偏移量单位一致
       return LatLng(
-        center.latitudeInRad + dLatDeg,
-        center.longitudeInRad + dLonDeg,
+        center.latitude + dLatDeg,
+        center.longitude + dLonDeg,
       );
     });
   }
@@ -132,9 +138,10 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // OSM 德国镜像 + 显式 User-Agent Header
+            // OSM 官方 CDN，a/b/c 子域轮询（符合 OSM 使用政策）
             TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+              urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+              subdomains: const ['a', 'b', 'c'],
               userAgentPackageName: 'com.locationchat.location_chat_app',
               tileProvider: NetworkTileProvider(
                 headers: {

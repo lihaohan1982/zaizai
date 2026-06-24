@@ -1,8 +1,9 @@
 // lib/demo/location_demo.dart
+// 主地图页面：地图 + 侧边栏 + 好友互动入口
 //
-// ⚠️ 诊断模式：DEBUG_FAKE_POSITION = true
-// 强制使用假GPS数据（北京），绕过所有权限和网络依赖
-// 用于验证：地图瓦片本身能否加载
+// 调试开关：DEBUG_FAKE_POSITION
+//   true  → 使用固定的北京坐标（模拟器/真机无 GPS 时用于测试）
+//   false → 使用真实 Geolocator 位置流（正式环境）
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -20,12 +21,22 @@ import '../features/map/presentation/widgets/geofence_status_indicator.dart';
 import '../features/map/presentation/widgets/location_map.dart';
 import '../features/fence/presentation/create_geofence_sheet.dart';
 
-/// ⚠️ 诊断模式开关：true = 强制假GPS（跳过所有权限和网络依赖）
-const bool DEBUG_FAKE_POSITION = true;
+/// 调试开关：true = 强制假GPS（北京天安门），false = 真实 GPS
+/// 正式发布前请改为 false
+// ignore: constant_identifier_names
+const bool DEBUG_FAKE_POSITION = false;
 
-/// 诊断用假GPS流：每3秒发一个北京天安门的固定坐标
+/// OSM 官方 CDN 瓦片地址（a/b/c 三个子域轮询，符合使用政策）
+const String _osmTileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+/// OSM 请求 User-Agent（OSM 使用政策要求标明应用身份）
+const Map<String, String> _osmHeaders = {
+  'User-Agent': 'location_chat_app/1.0 (com.locationchat.location_chat_app)',
+};
+
+/// 假GPS数据流（仅在 DEBUG_FAKE_POSITION=true 时使用）
 Stream<Position> _fakePositionStream() {
-  return Stream.periodic(const Duration(seconds: 3), (count) {
+  return Stream.periodic(const Duration(seconds: 3), (_) {
     // ignore: invalid_use_of_visible_for_testing_member
     return Position(
       latitude: 39.909187,
@@ -42,7 +53,7 @@ Stream<Position> _fakePositionStream() {
   });
 }
 
-/// 诊断用假GPS的 StreamProvider
+/// 假GPS StreamProvider（DEBUG_FAKE_POSITION=true 时使用）
 final _fakePositionStreamProvider = StreamProvider<Position>((ref) {
   return _fakePositionStream();
 });
@@ -85,7 +96,6 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
 
   @override
   Widget build(BuildContext context) {
-    // 诊断模式：强制用假GPS数据，否则用真实数据
     final positionAsync = DEBUG_FAKE_POSITION
         ? ref.watch(_fakePositionStreamProvider)
         : ref.watch(positionStreamProvider);
@@ -94,7 +104,7 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(DEBUG_FAKE_POSITION ? '🔧 诊断模式：假GPS' : '定位陪伴'),
+        title: Text(DEBUG_FAKE_POSITION ? '[调试] 假GPS' : '定位陪伴'),
         actions: [
           _SystemTimeButton(),
           privacyAsync.when(
@@ -131,9 +141,7 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
         children: [
           FloatingActionButton(
             heroTag: 'create_fence',
-            onPressed: _currentLat != null
-                ? () => _showCreateGeofenceSheet()
-                : null,
+            onPressed: _currentLat != null ? _showCreateGeofenceSheet : null,
             tooltip: '创建围栏',
             child: const Icon(Icons.add_location_alt),
           ),
@@ -187,6 +195,7 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
         _currentLat = lat;
         _currentLng = lon;
 
+        // 第一次收到 GPS 数据时将地图移到当前位置
         if (!_mapInitialized) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
@@ -199,6 +208,8 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
         final fences = fencesAsync.valueOrNull ?? [];
         final controller = privacyAsync.valueOrNull;
 
+        // PrivacyFuseController 尚未就绪：渲染只有 OSM 底图的轻量版地图，
+        // 等 controller 就绪后自动切换为完整的 LocationMap
         if (controller == null) {
           return FlutterMap(
             mapController: _mapController,
@@ -208,17 +219,10 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
             ),
             children: [
               TileLayer(
-                urlTemplate:
-                    'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
-                userAgentPackageName:
-                    'com.locationchat.location_chat_app',
-                // 显式注入 User-Agent
-                tileProvider: NetworkTileProvider(
-                  headers: {
-                    'User-Agent':
-                        'location_chat_app/1.0 (com.locationchat.location_chat_app)',
-                  },
-                ),
+                urlTemplate: _osmTileUrl,
+                subdomains: const ['a', 'b', 'c'],
+                userAgentPackageName: 'com.locationchat.location_chat_app',
+                tileProvider: NetworkTileProvider(headers: _osmHeaders),
               ),
             ],
           );
@@ -275,9 +279,7 @@ class _SystemTimeButtonState extends State<_SystemTimeButton> {
       onPressed: () {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              '当前系统时间: ${now.toString().substring(0, 19)}',
-            ),
+            content: Text('当前系统时间: ${now.toString().substring(0, 19)}'),
             duration: const Duration(seconds: 2),
           ),
         );

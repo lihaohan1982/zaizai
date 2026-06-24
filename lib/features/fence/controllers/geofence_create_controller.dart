@@ -53,9 +53,10 @@ class GeofenceCreateController extends StateNotifier<GeofenceCreateState> {
 
     try {
       final dioClient = _ref.read(dioClientProvider);
-      final response = await dioClient.dio.get(
-        '/api/geofences/create',
-        queryParameters: {
+      // [Phase1] 创建围栏：POST /api/geofences（REST 规范）
+      final response = await dioClient.dio.post(
+        '/api/geofences',
+        data: {
           'name': name.trim(),
           'lat': lat,
           'lng': lng,
@@ -76,7 +77,14 @@ class GeofenceCreateController extends StateNotifier<GeofenceCreateState> {
       }
     } catch (e) {
       debugPrint('[GeofenceCreate] 创建失败: $e');
-      state = state.copyWith(isLoading: false, error: e.toString());
+      // 若后端返回 404，说明端点路径不正确，提示检查后端路由
+      final errorMsg = e.toString();
+      state = state.copyWith(
+        isLoading: false,
+        error: errorMsg.contains('404')
+            ? '后端接口未找到(404)，请确认 POST /api/geofences 路由已注册'
+            : errorMsg,
+      );
     }
   }
 
