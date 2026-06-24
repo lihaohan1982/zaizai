@@ -209,10 +209,9 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
             children: [
               TileLayer(
                 urlTemplate:
-                    'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+                    'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName:
                     'com.locationchat.location_chat_app',
-                tileProvider: NetworkTileProvider(),
               ),
             ],
           );

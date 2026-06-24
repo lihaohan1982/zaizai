@@ -115,6 +115,16 @@ class _CreateGeofenceSheetState extends ConsumerState<CreateGeofenceSheet> {
               onPressed: state.isLoading
                   ? null
                   : () {
+                      // ⚠️ 防御：(0,0) 是无效坐标，拦截请求防止 404
+                      if (widget.lat == 0.0 && widget.lng == 0.0) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('⚠️ 定位未就绪，无法创建围栏'),
+                            backgroundColor: Colors.orange,
+                          ),
+                        );
+                        return;
+                      }
                       final controller =
                           ref.read(geofenceCreateControllerProvider.notifier);
                       controller.createGeofence(

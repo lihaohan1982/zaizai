@@ -132,9 +132,9 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // OSM 德国镜像（已在中国手机网络验证可达）
+            // OpenStreetMap 官方源（全球通用）
             TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.locationchat.location_chat_app',
             ),
             // 围栏多边形
