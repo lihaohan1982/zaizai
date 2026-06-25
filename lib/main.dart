@@ -68,6 +68,23 @@ void main() async {
 
       // ── 探针 ⑤ 启动 App（必须执行，否则白屏）──
       debugPrint('[启动] ⑤ runApp 开始 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+
+      // 设置全局错误 Widget，防止瓦片加载等同步异常在生产环境上显示为红屏
+      // 原来的红屏画面（"ClientException with SocketException"）会被这个替代
+      ErrorWidget.builder = (FlutterErrorDetails details) {
+        debugPrint('[错误瓦片] ${details.exception}');
+        return Container(
+          color: const Color(0xFFFF9800),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.all(16),
+          child: const Text(
+            '瓦片加载异常\n（已捕获）',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.white, fontSize: 14),
+          ),
+        );
+      };
+
       runApp(const ProviderScope(child: MyApp()));
     },
     (error, stack) => _handleUncaughtError(error, stack),

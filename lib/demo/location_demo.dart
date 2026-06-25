@@ -26,14 +26,9 @@ import '../features/fence/presentation/create_geofence_sheet.dart';
 // ignore: constant_identifier_names
 const bool DEBUG_FAKE_POSITION = false;
 
-/// OSM 德国镜像（国内可访问，避免 GFW 拦截）
-/// 原官方 CDN tile.openstreetmap.org 在中国大陆被墙
-const String _osmTileUrl = 'https://tile.openstreetmap.de/{z}/{x}/{y}.png';
-
-/// OSM 请求 User-Agent（OSM 使用政策要求标明应用身份）
-const Map<String, String> _osmHeaders = {
-  'User-Agent': 'location_chat_app/1.0 (com.locationchat.location_chat_app)',
-};
+/// 高德地图瓦片（国内直连，无 GFW 拦截，无需 API Key）
+/// OSM 服务（org / de）在国内均不可达，已切到高德 raster tiles
+const String _osmTileUrl = 'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
 
 /// 假GPS数据流（仅在 DEBUG_FAKE_POSITION=true 时使用）
 Stream<Position> _fakePositionStream() {

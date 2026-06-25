@@ -155,16 +155,11 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // OSM 德国镜像（国内可访问）
+            // 高德地图瓦片（国内直连，无 GFW 拦截，无需 API Key）
             TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+              urlTemplate: 'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
               userAgentPackageName: 'com.locationchat.location_chat_app',
-              tileProvider: NetworkTileProvider(
-                headers: {
-                  'User-Agent':
-                      'location_chat_app/1.0 (com.locationchat.location_chat_app)',
-                },
-              ),
+              tileProvider: NetworkTileProvider(),
               // 诊断：瓦片构建时叠加坐标文字（证明 TileLayer 在工作）
               tileBuilder: _showDiagnostics
                   ? (context, child, tile) => DebugTile(
