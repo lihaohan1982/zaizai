@@ -5,6 +5,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -39,6 +40,12 @@ class _LocationMapState extends State<LocationMap>
       widget.privacyController.fuseStatusNotifier.value ==
       PrivacyFuseStatus.paused;
 
+  // 瓦片加载诊断状态
+  int _tilesLoaded = 0;
+  int _tilesFailed = 0;
+  String? _lastError;
+  bool _showDiagnostics = true; // 临时开启，验证瓦片源是否可达
+
   @override
   void initState() {
     super.initState();
@@ -58,6 +65,16 @@ class _LocationMapState extends State<LocationMap>
       if (mounted) setState(() {});
     };
     widget.privacyController.fuseStatusNotifier.addListener(_statusListener);
+
+    // 5 秒后强制检查：瓦片是否加载成功
+    Future.delayed(const Duration(seconds: 5), () {
+      if (mounted && _tilesLoaded == 0 && _tilesFailed == 0) {
+        debugPrint('[地图诊断] 5 秒内无任何瓦片请求/响应，瓦片源不可达');
+        setState(() {
+          _lastError = '5 秒内无瓦片响应 — 瓦片源不可达或网络被拦截';
+        });
+      }
+    });
   }
 
   @override
@@ -148,9 +165,21 @@ class _LocationMapState extends State<LocationMap>
                       'location_chat_app/1.0 (com.locationchat.location_chat_app)',
                 },
               ),
-              // 诊断：瓦片加载失败时打印日志
+              // 诊断：瓦片构建时叠加坐标文字（证明 TileLayer 在工作）
+              tileBuilder: _showDiagnostics
+                  ? (context, child, tile) => DebugTile(
+                      child: child,
+                      x: tile.coordinates.x,
+                      y: tile.coordinates.y,
+                      z: tile.coordinates.z,
+                    )
+                  : null,
+              // 诊断：瓦片加载失败时打印日志 + 计数
               errorTileCallback: (tile, error, stackTrace) {
+                _tilesFailed++;
+                _lastError = error.toString();
                 debugPrint('[地图异常] 瓦片加载失败: z=${tile.coordinates.z} x=${tile.coordinates.x} y=${tile.coordinates.y} — $error');
+                if (mounted) setState(() {});
               },
             ),
             // 围栏多边形
@@ -184,6 +213,60 @@ class _LocationMapState extends State<LocationMap>
               ),
             ),
           ),
+
+        // 瓦片诊断信息（仅调试显示）
+        if (_showDiagnostics)
+          Positioned(
+            top: 60,
+            left: 8,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              color: Colors.black54,
+              child: Text(
+                '瓦片: 成功=$_tilesLoaded 失败=$_tilesFailed\n'
+                '源: tile.openstreetmap.de\n'
+                '${_lastError != null ? "最后错误: $_lastError" : "等待瓦片加载..."}',
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 调试瓦片 — 在每个瓦片上叠加坐标文字，证明 TileLayer 在工作
+@visibleForTesting
+class DebugTile extends StatelessWidget {
+  final Widget child;
+  final int x, y, z;
+
+  const DebugTile({
+    super.key,
+    required this.child,
+    required this.x,
+    required this.y,
+    required this.z,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        Container(
+          color: Colors.cyan.withValues(alpha: 0.2),
+          alignment: Alignment.center,
+          child: Text(
+            '$z/$x/$y',
+            style: const TextStyle(
+              color: Colors.red,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
       ],
     );
   }
