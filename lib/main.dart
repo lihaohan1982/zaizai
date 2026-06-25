@@ -19,21 +19,29 @@ import 'demo/location_demo.dart';
 void main() async {
   final mainStart = DateTime.now();
 
-  // ① 在 runZonedGuarded 内部完成所有初始化，同一 zone
+  // 在 runZonedGuarded 内部完成所有初始化
   await runZonedGuarded(
     () async {
       // ── 探针 ① 绑定初始化 ──
       debugPrint('[启动] ① WidgetsFlutterBinding.ensureInitialized 开始 ${DateTime.now()}');
-      WidgetsFlutterBinding.ensureInitialized();
-      debugPrint('[启动] ① 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+      try {
+        WidgetsFlutterBinding.ensureInitialized();
+        debugPrint('[启动] ① 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+      } catch (e) {
+        debugPrint('[启动] ① 异常: $e');
+      }
 
       // Flutter 框架异常捕获
       FlutterError.onError = _handleFlutterError;
 
-      // ── 探针 ② Hive 初始化 ──
+      // ── 探针 ② Hive 初始化（带 try/catch，失败不影响 runApp）──
       debugPrint('[启动] ② Hive.initFlutter 开始');
-      await Hive.initFlutter();
-      debugPrint('[启动] ② 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+      try {
+        await Hive.initFlutter();
+        debugPrint('[启动] ② 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+      } catch (e) {
+        debugPrint('[启动] ② 异常: $e — Hive 初始化失败，跳过继续启动');
+      }
 
       // ── 探针 ③ 环境配置加载 ──
       debugPrint('[启动] ③ EnvConfig.load 开始');
@@ -58,7 +66,7 @@ void main() async {
       }
       debugPrint('[启动] ④ 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
 
-      // ── 探针 ⑤ 启动 App ──
+      // ── 探针 ⑤ 启动 App（必须执行，否则白屏）──
       debugPrint('[启动] ⑤ runApp 开始 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
       runApp(const ProviderScope(child: MyApp()));
     },
@@ -127,6 +135,8 @@ class _MyAppState extends ConsumerState<MyApp> {
       navigatorObservers: [SentryNavigatorObserver()],
       onGenerateRoute: _onGenerateRoute,
       home: _buildRootPage(),
+      // 捕获所有未处理的 Flutter 异常，显示错误页面而非纯白
+      builder: (context, child) => _ErrorBoundary(child: child),
     );
   }
 
@@ -284,5 +294,100 @@ class _InitializationRouter extends ConsumerWidget {
         },
       ),
     );
+  }
+}
+
+/// 全局错误边界
+///
+/// 捕获 build/layout 阶段的异常，显示红色错误页面而非纯白屏。
+/// 配合 builder 参数使用：MaterialApp(builder: (ctx, child) => _ErrorBoundary(child: child))
+class _ErrorBoundary extends StatelessWidget {
+  final Widget? child;
+
+  const _ErrorBoundary({super.key, this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return FlutterError.onError != null
+        ? _ErrorBoundaryWidget(child: child)
+        : (child ?? const SizedBox.shrink());
+  }
+}
+
+class _ErrorBoundaryWidget extends StatefulWidget {
+  final Widget? child;
+  const _ErrorBoundaryWidget({super.key, this.child});
+
+  @override
+  State<_ErrorBoundaryWidget> createState() => _ErrorBoundaryWidgetState();
+}
+
+class _ErrorBoundaryWidgetState extends State<_ErrorBoundaryWidget> {
+  void Function(FlutterErrorDetails)? _originalHandler;
+
+  @override
+  void initState() {
+    super.initState();
+    _originalHandler = FlutterError.onError;
+    FlutterError.onError = (details) {
+      // 调用原始 handler 保持 Sentry 上报
+      _originalHandler?.call(details);
+      // 同时刷新 UI 显示错误
+      if (mounted) {
+        setState(() {
+          _lastError = '${details.exception}';
+          debugPrint('[ErrorBoundary] ${details.exception}');
+          debugPrint('[ErrorBoundary] ${details.stack}');
+        });
+      }
+    };
+  }
+
+  String? _lastError;
+
+  @override
+  void dispose() {
+    // 恢复原始 handler
+    FlutterError.onError = _originalHandler;
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_lastError != null) {
+      return Material(
+        color: Colors.red.shade50,
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '应用遇到错误',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _lastError!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => setState(() => _lastError = null),
+                    child: const Text('清除错误，继续'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    return widget.child ?? const SizedBox.shrink();
   }
 }

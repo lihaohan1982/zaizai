@@ -223,6 +223,10 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
                 subdomains: const ['a', 'b', 'c'],
                 userAgentPackageName: 'com.locationchat.location_chat_app',
                 tileProvider: NetworkTileProvider(headers: _osmHeaders),
+                // 诊断：瓦片加载失败时打印日志
+                errorTileCallback: (tile, error, stackTrace) {
+                  debugPrint('[地图异常] 瓦片加载失败: z=${tile.coordinates.z} x=${tile.coordinates.x} y=${tile.coordinates.y} — $error');
+                },
               ),
             ],
           );

@@ -56,6 +56,16 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
 
     // 延迟一小段时间再检测（避免冷启动误判）
     Future.delayed(const Duration(milliseconds: 300), _checkInitialState);
+
+    // 总超时保护：如果 30 秒内 _checkInitialState 未完成，显示重试
+    Future.delayed(const Duration(seconds: 30), () {
+      if (!mounted || _state == _EmptyState.loading) {
+        debugPrint('[EmptyStatePage] 初始化超时(30s) — 显示重试按钮');
+        setState(() {
+          _message = '初始化超时，请确保已开启定位服务后再试';
+        });
+      }
+    });
   }
 
   @override
@@ -234,10 +244,23 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
                   ),
                 ),
 
-              // 隐私状态指示（仅在加载状态显示）
+              // 隐私状态指示 + 加载动画（仅在加载状态显示）
               if (_state == _EmptyState.loading) ...[
                 const SizedBox(height: 40),
+                const CircularProgressIndicator(),
+                const SizedBox(height: 20),
                 const _PrivacyStatusChip(),
+                const SizedBox(height: 24),
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _message = '正在初始化定位服务...';
+                    });
+                    _checkInitialState();
+                  },
+                  icon: const Icon(Icons.refresh, size: 18),
+                  label: const Text('重新检测'),
+                ),
               ],
             ],
           ),
