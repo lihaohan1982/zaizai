@@ -100,6 +100,13 @@ extension GcjExtension on LatLng {
 class MapLayerFactory {
   MapLayerFactory._();
 
+  /// 高德瓦片 URL 模板（{key} 占位符由实际 API Key 替换）
+  static const String _kAmapTileUrl =
+      'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}&key={key}';
+
+  /// 默认高德 API Key（仅用于紧急调试，生产环境请通过 EnvConfig.amapApiKey 配置）
+  static const String _kFallbackAmapKey = '13bffa45068fd901bea739f49a414ed7';
+
   /// 256×256 浅灰色 PNG 字节（base64 解码）
   /// 瓦片加载失败时用 MemoryImage 显示，不走网络加载。
   static final Uint8List _kGrayTileBytes = base64Decode(
@@ -115,12 +122,17 @@ class MapLayerFactory {
   );
 
   /// 创建高德矢量瓦片图层（GCJ-02 坐标系，国内秒开）
+  ///
+  /// [amapApiKey] 高德 Web API Key，从 Amap 控制台获取。
+  /// 若未传入，使用内置默认值（仅用于紧急调试）。
   static TileLayer createAmapLayer({
-    String urlTemplate =
-        'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+    String? amapApiKey,
+    String urlTemplate = _kAmapTileUrl,
     void Function(TileImage tile, Object error, StackTrace? stackTrace)?
         onTileError,
   }) {
+    final key = amapApiKey ?? _kFallbackAmapKey;
+    final url = urlTemplate.replaceAll('{key}', key);
     void Function(TileImage, Object, StackTrace?) logger =
         onTileError ??
             (tile, err, st) {
@@ -129,7 +141,7 @@ class MapLayerFactory {
             };
 
     return TileLayer(
-      urlTemplate: urlTemplate,
+      urlTemplate: url,
       // ✅ errorImage: 瓦片失败时显示灰色占位图（256x256 灰色 PNG）
       // MemoryImage 是 ImageProvider，直接渲染到瓦片位置，不走网络加载
       errorImage: MemoryImage(_kGrayTileBytes),
