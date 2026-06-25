@@ -1,17 +1,16 @@
 // lib/features/map/presentation/widgets/location_map.dart
-// OpenStreetMap 围栏渲染 + 闪烁动画 + 隐私暂停遮罩
-// 使用 flutter_map（无需 API Key）
+// 高德地图瓦片 + 围栏渲染 + 闪烁动画 + 隐私暂停遮罩
+// 瓦片源：webrd01.is.autonavi.com（国内直连，无需 API Key）
 
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:location_chat_app/core/privacy/privacy_fuse_controller.dart';
 
-/// 使用 OpenStreetMap 渲染围栏，支持触发闪烁动画
+/// 使用高德地图渲染围栏，支持触发闪烁动画
 class LocationMap extends StatefulWidget {
   final List<Map<String, dynamic>> fences;
   final String? triggeredFenceId;
@@ -40,12 +39,6 @@ class _LocationMapState extends State<LocationMap>
       widget.privacyController.fuseStatusNotifier.value ==
       PrivacyFuseStatus.paused;
 
-  // 瓦片加载诊断状态
-  int _tilesLoaded = 0;
-  int _tilesFailed = 0;
-  String? _lastError;
-  bool _showDiagnostics = true; // 临时开启，验证瓦片源是否可达
-
   @override
   void initState() {
     super.initState();
@@ -65,16 +58,6 @@ class _LocationMapState extends State<LocationMap>
       if (mounted) setState(() {});
     };
     widget.privacyController.fuseStatusNotifier.addListener(_statusListener);
-
-    // 5 秒后强制检查：瓦片是否加载成功
-    Future.delayed(const Duration(seconds: 5), () {
-      if (mounted && _tilesLoaded == 0 && _tilesFailed == 0) {
-        debugPrint('[地图诊断] 5 秒内无任何瓦片请求/响应，瓦片源不可达');
-        setState(() {
-          _lastError = '5 秒内无瓦片响应 — 瓦片源不可达或网络被拦截';
-        });
-      }
-    });
   }
 
   @override
@@ -86,31 +69,21 @@ class _LocationMapState extends State<LocationMap>
   }
 
   /// 使用多边形近似绘制圆形围栏
-  ///
-  /// 坐标转换：米 → 度
-  ///   1°纬度 ≈ 111320m，1°经度 ≈ 111320m × cos(lat)
-  ///   多边形顶点数 points 越多，圆越平滑（默认32点）
-  ///
-  /// 注意：LatLng.latitude / longitude 是十进制度（°）。
-  ///       cos() 需要弧度，先显式乘以 π/180 转换，
-  ///       最终加回的 dLatDeg/dLonDeg 也是度数，单位统一。
   List<LatLng> _generateCirclePoints(
     LatLng center,
     double radius, [
     int points = 32,
   ]) {
     const latDegPerMeter = 1.0 / 111320.0;
-    // center.latitude 是十进制度，cos() 需要弧度
     final cosLat = math.cos(center.latitude * math.pi / 180.0);
     final lonDegPerMeter = latDegPerMeter / (cosLat.abs() < 1e-10 ? 1e-10 : cosLat);
 
     return List.generate(points, (i) {
       final angle = 2 * math.pi * i / points;
-      final dx = radius * math.cos(angle); // 米（东西方向）
-      final dy = radius * math.sin(angle); // 米（南北方向）
+      final dx = radius * math.cos(angle);
+      final dy = radius * math.sin(angle);
       final dLatDeg = dy * latDegPerMeter;
       final dLonDeg = dx * lonDegPerMeter;
-      // 基准坐标用十进制度（°），与偏移量单位一致
       return LatLng(
         center.latitude + dLatDeg,
         center.longitude + dLonDeg,
@@ -120,7 +93,6 @@ class _LocationMapState extends State<LocationMap>
 
   @override
   Widget build(BuildContext context) {
-    // 构建围栏多边形集合
     final polygons = <Polygon>{};
     for (final fence in widget.fences) {
       final isTriggered =
@@ -147,7 +119,6 @@ class _LocationMapState extends State<LocationMap>
 
     return Stack(
       children: [
-        // OpenStreetMap + 围栏 Polygon
         FlutterMap(
           mapController: _mapController,
           options: const MapOptions(
@@ -155,26 +126,17 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // 高德地图瓦片（国内直连，无 GFW 拦截，无需 API Key）
+            // 高德矢量图：国内秒开，无 GFW 拦截，无需 API Key
             TileLayer(
-              urlTemplate: 'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+              urlTemplate:
+                  'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
               userAgentPackageName: 'com.locationchat.location_chat_app',
               tileProvider: NetworkTileProvider(),
-              // 诊断：瓦片构建时叠加坐标文字（证明 TileLayer 在工作）
-              tileBuilder: _showDiagnostics
-                  ? (context, child, tile) => DebugTile(
-                      child: child,
-                      x: tile.coordinates.x,
-                      y: tile.coordinates.y,
-                      z: tile.coordinates.z,
-                    )
-                  : null,
-              // 诊断：瓦片加载失败时打印日志 + 计数
+              // 兜底：加载失败时显示透明占位图，避免红屏
+              errorImage: const AssetImage('assets/images/transparent.png'),
+              // 兜底：捕获错误并打印日志，不中断 UI
               errorTileCallback: (tile, error, stackTrace) {
-                _tilesFailed++;
-                _lastError = error.toString();
-                debugPrint('[地图异常] 瓦片加载失败: z=${tile.coordinates.z} x=${tile.coordinates.x} y=${tile.coordinates.y} — $error');
-                if (mounted) setState(() {});
+                debugPrint('⚠️ 地图瓦片加载失败: ${tile.coordinates} — $error');
               },
             ),
             // 围栏多边形
@@ -208,60 +170,6 @@ class _LocationMapState extends State<LocationMap>
               ),
             ),
           ),
-
-        // 瓦片诊断信息（仅调试显示）
-        if (_showDiagnostics)
-          Positioned(
-            top: 60,
-            left: 8,
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              color: Colors.black54,
-              child: Text(
-                '瓦片: 成功=$_tilesLoaded 失败=$_tilesFailed\n'
-                '源: tile.openstreetmap.de\n'
-                '${_lastError != null ? "最后错误: $_lastError" : "等待瓦片加载..."}',
-                style: const TextStyle(color: Colors.white, fontSize: 10),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// 调试瓦片 — 在每个瓦片上叠加坐标文字，证明 TileLayer 在工作
-@visibleForTesting
-class DebugTile extends StatelessWidget {
-  final Widget child;
-  final int x, y, z;
-
-  const DebugTile({
-    super.key,
-    required this.child,
-    required this.x,
-    required this.y,
-    required this.z,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        child,
-        Container(
-          color: Colors.cyan.withValues(alpha: 0.2),
-          alignment: Alignment.center,
-          child: Text(
-            '$z/$x/$y',
-            style: const TextStyle(
-              color: Colors.red,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ),
       ],
     );
   }

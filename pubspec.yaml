@@ -64,3 +64,4 @@ flutter:
     - .env
     - assets/mock_friends.json
     - assets/mock_fences.json
+    - assets/images/transparent.png

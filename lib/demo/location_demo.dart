@@ -28,7 +28,7 @@ const bool DEBUG_FAKE_POSITION = false;
 
 /// 高德地图瓦片（国内直连，无 GFW 拦截，无需 API Key）
 /// OSM 服务（org / de）在国内均不可达，已切到高德 raster tiles
-const String _osmTileUrl = 'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
+const String _osmTileUrl = 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
 
 /// 假GPS数据流（仅在 DEBUG_FAKE_POSITION=true 时使用）
 Stream<Position> _fakePositionStream() {
@@ -228,12 +228,12 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
             children: [
               TileLayer(
                 urlTemplate: _osmTileUrl,
-                subdomains: const ['a', 'b', 'c'],
                 userAgentPackageName: 'com.locationchat.location_chat_app',
-                tileProvider: NetworkTileProvider(headers: _osmHeaders),
-                // 诊断：瓦片加载失败时打印日志
+                tileProvider: NetworkTileProvider(),
+                // 兜底：加载失败显示透明占位图，不红屏
+                errorImage: const AssetImage('assets/images/transparent.png'),
                 errorTileCallback: (tile, error, stackTrace) {
-                  debugPrint('[地图异常] 瓦片加载失败: z=${tile.coordinates.z} x=${tile.coordinates.x} y=${tile.coordinates.y} — $error');
+                  debugPrint('⚠️ 地图瓦片加载失败: ${tile.coordinates} — $error');
                 },
               ),
             ],
