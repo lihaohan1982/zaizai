@@ -76,78 +76,13 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
 
   /// 检查初始状态（权限 + 定位开关 + 定位获取）
   ///
-  /// 每个原生通道调用均带超时保护，防止模拟器/真机原生层卡死导致白屏。
+  /// [修复 Android 15 小米死锁] 直接触发 onReady()，不调用 Geolocator 平台通道。
+  /// 定位权限由系统首次弹窗处理；隐私围栏 empty 状态直接进入地图页引导创建。
   Future<void> _checkInitialState() async {
     if (!mounted) return;
 
-    // 1. 检查权限（带 5 秒超时）
-    LocationPermission permission;
-    try {
-      permission = await Geolocator.checkPermission()
-          .timeout(const Duration(seconds: 5));
-    } on TimeoutException {
-      debugPrint('[EmptyStatePage] checkPermission 超时(5s)，降级通过');
-      permission = LocationPermission.whileInUse; // 超时假设有权限
-    }
-
-    if (!mounted) return;
-    if (permission == LocationPermission.denied ||
-        permission == LocationPermission.deniedForever) {
-      setState(() {
-        _state = _EmptyState.noPermission;
-        _message = '需要定位权限才能正常使用';
-      });
-      return;
-    }
-
-    // 2. 检查定位开关（带 5 秒超时）
-    bool isEnabled;
-    try {
-      isEnabled = await Geolocator.isLocationServiceEnabled()
-          .timeout(const Duration(seconds: 5));
-    } on TimeoutException {
-      debugPrint('[EmptyStatePage] isLocationServiceEnabled 超时(5s)，假设已开启');
-      isEnabled = true;
-    }
-
-    if (!mounted) return;
-    if (!isEnabled) {
-      setState(() {
-        _state = _EmptyState.locationOff;
-        _message = '请在设置中开启定位服务';
-      });
-      return;
-    }
-
-    // 3. 尝试获取一次定位，确认服务可用（10 秒超时）
-    setState(() {
-      _state = _EmptyState.loading;
-      _message = '正在获取位置...';
-    });
-
-    try {
-      await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
-      );
-    } on LocationServiceDisabledException {
-      if (!mounted) return;
-      setState(() {
-        _state = _EmptyState.locationOff;
-        _message = '定位服务已关闭';
-      });
-      return;
-    } catch (e) {
-      // 模拟器/弱网/超时：允许进入主界面（地图页会处理）
-      if (e is TimeoutException) {
-        debugPrint('[EmptyStatePage] 定位获取超时(10s)，继续进入主界面');
-      } else {
-        debugPrint('[EmptyStatePage] 定位获取异常: $e');
-      }
-    }
-
-    if (!mounted) return;
-    // 初始化成功 → 通知上层跳转到地图页
+    // 直接进入地图页，不阻塞在 Geolocator 平台通道调用上
+    debugPrint('[EmptyStatePage] 跳过 Geolocator 检测，直接触发 onReady()');
     widget.onReady?.call();
   }
 
@@ -361,7 +296,10 @@ class _PrivacyStatusChip extends ConsumerWidget {
       data: (controller) => switch (controller.initStatus) {
         InitializationStatus.loading || InitializationStatus.failed =>
           ('隐私控制初始化中', Colors.grey, Icons.settings),
-        _ => switch (controller.fuseStatus) {
+        InitializationStatus.empty =>
+          // empty = 无围栏配置，正常进入地图页（正常状态）
+          ('位置共享已开启', Colors.green, Icons.visibility),
+        InitializationStatus.success => switch (controller.fuseStatus) {
           PrivacyFuseStatus.normal =>
             ('位置共享已开启', Colors.green, Icons.visibility),
           PrivacyFuseStatus.paused =>

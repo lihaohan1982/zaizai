@@ -7,428 +7,387 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/config/env_config.dart';
 import 'core/monitoring/sentry_service.dart';
+import 'core/privacy/privacy_fuse_controller.dart';
 import 'core/providers.dart';
+import 'features/chat/pages/add_friend_page.dart';
+import 'features/chat/pages/interaction_sheet.dart';
+import 'features/fence/pages/fence_event_history_page.dart';
+import 'features/map/presentation/pages/empty_state_page.dart';
+import 'features/profile/pages/privacy_settings_page.dart';
+import 'demo/location_demo.dart';
 
-/// v5 - EmptyStatePage 真实逻辑 + 详细日志
-///
-/// 目标：定位 EmptyStatePage 卡在哪一步
-void main() {
-  debugPrint('═══════════════════════════════════════');
-  debugPrint('🚀 [main] 启动');
-  debugPrint('═══════════════════════════════════════');
+void main() async {
+  final mainStart = DateTime.now();
 
-  runApp(const _InitApp());
-}
-
-class _InitApp extends StatefulWidget {
-  const _InitApp();
-  @override
-  State<_InitApp> createState() => _InitAppState();
-}
-
-class _InitAppState extends State<_InitApp> {
-  String _status = '⏳ 初始化中...';
-  String? _error;
-  final List<String> _logs = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _init();
-  }
-
-  void _log(String msg) {
-    _logs.add(msg);
-    debugPrint('[v5] $msg');
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _init() async {
-    try {
-      _log('⏳ Step 1: WidgetsFlutterBinding...');
-      WidgetsFlutterBinding.ensureInitialized();
-      _log('✅ Step 1 完成');
-      await Future.delayed(Duration.zero);
-
-      _log('⏳ Step 2: Hive.initFlutter()...');
-      await Hive.initFlutter();
-      _log('✅ Step 2 完成');
-      await Future.delayed(Duration.zero);
-
-      _log('⏳ Step 3: EnvConfig.load()...');
-      await EnvConfig.load();
-      _log('✅ Step 3 完成');
-      await Future.delayed(Duration.zero);
-
-      _log('⏳ Step 4: SentryService.initialize()...');
+  // 在 runZonedGuarded 内部完成所有初始化
+  await runZonedGuarded(
+    () async {
+      // ── 探针 ① 绑定初始化 ──
+      debugPrint('[启动] ① WidgetsFlutterBinding.ensureInitialized 开始 ${DateTime.now()}');
       try {
-        await SentryService.initialize().timeout(const Duration(seconds: 5));
-        _log('✅ Step 4 完成');
+        WidgetsFlutterBinding.ensureInitialized();
+        debugPrint('[启动] ① 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
       } catch (e) {
-        _log('⚠️ Step 4 超时，跳过');
+        debugPrint('[启动] ① 异常: $e');
       }
-      await Future.delayed(Duration.zero);
 
-      _log('✅ 全部初始化完成');
-      setState(() => _status = '✅ 初始化成功，启动应用...');
-    } catch (e, s) {
-      _log('❌ 初始化失败: $e');
-      debugPrint('$s');
-      setState(() => _error = e.toString());
-    }
-  }
+      // Flutter 框架异常捕获
+      FlutterError.onError = _handleFlutterError;
+
+      // ── 探针 ② Hive 初始化（带 try/catch，失败不影响 runApp）──
+      debugPrint('[启动] ② Hive.initFlutter 开始');
+      try {
+        await Hive.initFlutter();
+        debugPrint('[启动] ② 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+      } catch (e) {
+        debugPrint('[启动] ② 异常: $e — Hive 初始化失败，跳过继续启动');
+      }
+
+      // ── 探针 ③ 环境配置加载 ──
+      debugPrint('[启动] ③ EnvConfig.load 开始');
+      try {
+        await EnvConfig.load();
+      } catch (e) {
+        debugPrint('[启动] ③ 异常: $e — 使用 fallback 继续启动');
+      }
+      debugPrint('[启动] ③ 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+
+      // ── 探针 ④ Sentry 崩溃监控（带 5 秒超时保护）──
+      debugPrint('[启动] ④ SentryService.initialize 开始');
+      try {
+        await SentryService.initialize().timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            debugPrint('[启动] ④ Sentry 初始化超时(5s)，跳过继续启动');
+          },
+        );
+      } catch (e) {
+        debugPrint('[启动] ④ Sentry 异常: $e — 跳过继续启动');
+      }
+      debugPrint('[启动] ④ 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+
+      // ── 探针 ⑤ 启动 App（必须执行，否则白屏）──
+      debugPrint('[启动] ⑤ runApp 开始 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
+      runApp(const ProviderScope(child: MyApp()));
+    },
+    (error, stack) => _handleUncaughtError(error, stack),
+  );
+}
+
+/// Flutter 框架异常处理器
+///
+/// 捕获 build/layout/paint 阶段的异常，避免 UI 白屏，并上报 Sentry。
+void _handleFlutterError(FlutterErrorDetails details) {
+  // 始终打印（开发阶段快速定位）
+  FlutterError.dumpErrorToConsole(details);
+
+  // [Phase 1] 上报 Sentry
+  SentryService.captureException(
+    details.exception,
+    stackTrace: details.stack,
+    hint: 'flutter_error',
+    extra: {
+      'library': details.library,
+      'context': details.context?.toString(),
+      'silent': details.silent,
+    },
+  );
+}
+
+/// 未捕获异常处理器（Dart 层 + 异步异常）
+void _handleUncaughtError(Object error, StackTrace stack) {
+  // 始终打印
+  debugPrint('[UncaughtError] $error');
+  debugPrint('$stack');
+
+  // [Phase 1] 上报 Sentry
+  SentryService.captureException(
+    error,
+    stackTrace: stack,
+    hint: 'uncaught_error',
+  );
+}
+
+class MyApp extends ConsumerStatefulWidget {
+  const MyApp({super.key});
+
+  @override
+  ConsumerState<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends ConsumerState<MyApp> {
+  /// 是否已完成定位环境检测（EmptyStatePage onReady 回调）
+  bool _locationReady = false;
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) {
-      return _ErrorScreen(error: _error!, logs: _logs);
-    }
+    final messengerKey = ref.watch(scaffoldMessengerKeyProvider);
+    final theme = ThemeData(
+      colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+      useMaterial3: true,
+    );
 
-    if (_logs.any((l) => l.contains('初始化完成'))) {
-      return ProviderScope(
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          home: _RealAppWithLogs(),
-        ),
+    return MaterialApp(
+      title: 'Location Chat',
+      debugShowCheckedModeBanner: false,
+      theme: theme,
+      scaffoldMessengerKey: messengerKey,
+      navigatorObservers: [SentryNavigatorObserver()],
+      onGenerateRoute: _onGenerateRoute,
+      home: _buildRootPage(),
+      // 捕获所有未处理的 Flutter 异常，显示错误页面而非纯白
+      builder: (context, child) => _ErrorBoundary(child: child),
+    );
+  }
+
+  Widget _buildRootPage() {
+    // 第一道门：EmptyStatePage 检测定位权限与服务状态
+    // 权限通过后 → _InitializationRouter 检查围栏/隐私初始化
+    if (!_locationReady) {
+      return EmptyStatePage(
+        onReady: () {
+          setState(() => _locationReady = true);
+        },
+      );
+    }
+    return _InitializationRouter();
+  }
+
+  /// 应用路由契约
+  ///
+  /// 支持：
+  ///   - /interaction/:friendId  → 好友互动页
+  ///   - /privacy-settings       → 隐私与位置设置页
+  ///   - /fence/:fenceId/events  → 围栏事件历史页
+  Route<dynamic>? _onGenerateRoute(RouteSettings settings) {
+    final name = settings.name;
+    if (name == null) return null;
+
+    // /add-friend
+    if (name == '/add-friend') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const AddFriendPage(),
       );
     }
 
-    return _LoadingScreen(status: _status, logs: _logs);
+    // /interaction/:friendId
+    if (name.startsWith('/interaction/')) {
+      final friendId = name.substring('/interaction/'.length);
+      if (friendId.isNotEmpty) {
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => InteractionSheet(
+            friendId: friendId,
+            friendName: '好友',
+            avatarUrl: '',
+          ),
+        );
+      }
+    }
+
+    // /privacy-settings
+    if (name == '/privacy-settings') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => const PrivacySettingsPage(),
+      );
+    }
+
+    // /fence/:fenceId/events
+    if (name.startsWith('/fence/') && name.endsWith('/events')) {
+      final prefix = '/fence/';
+      final suffix = '/events';
+      final fenceId = name.substring(prefix.length, name.length - suffix.length);
+      if (fenceId.isNotEmpty) {
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => FenceEventHistoryPage(
+            fenceId: fenceId,
+            fenceName: fenceId == 'home' ? '家' : '围栏',
+          ),
+        );
+      }
+    }
+
+    // 未知路由：返回一个空错误页，避免抛异常崩溃
+    return MaterialPageRoute(
+      settings: settings,
+      builder: (_) => Scaffold(
+        appBar: AppBar(title: const Text('页面未找到')),
+        body: Center(child: Text('未知路由: $name')),
+      ),
+    );
   }
 }
 
-/// 真实应用 + 每一步打日志
-class _RealAppWithLogs extends StatefulWidget {
+/// 围栏初始化路由器
+///
+/// 监听 PrivacyFuseController 的 initStatus，
+/// 根据 UI 路由契约（P1-6）决定展示哪个页面。
+class _InitializationRouter extends ConsumerWidget {
   @override
-  State<_RealAppWithLogs> createState() => _RealAppWithLogsState();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final privacyAsync = ref.watch(privacyFuseControllerProvider);
+
+    return privacyAsync.when(
+      loading: () => const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      ),
+      error: (e, _) => Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const SizedBox(height: 16),
+              Text('初始化失败: $e', textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => ref.invalidate(privacyFuseControllerProvider),
+                child: const Text('重试'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      data: (controller) => ListenableBuilder(
+        listenable: Listenable.merge([
+          controller.initStatusNotifier,
+        ]),
+        builder: (_, __) {
+          switch (controller.initStatusNotifier.value) {
+            case InitializationStatus.loading:
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
+
+            case InitializationStatus.failed:
+              return Scaffold(
+                body: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                      const SizedBox(height: 16),
+                      const Text('围栏数据加载失败'),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: () {
+                          controller.initialize('home');
+                        },
+                        child: const Text('重试'),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+
+            case InitializationStatus.empty:
+              // MVP 期间：空状态也进入地图页面（后续改为强制创建围栏）
+              // 用户可在地图页手动创建围栏
+              return const LocationDemoPage();
+
+            case InitializationStatus.success:
+              return const LocationDemoPage();
+          }
+        },
+      ),
+    );
+  }
 }
 
-class _RealAppWithLogsState extends State<_RealAppWithLogs> {
-  String _phase = '🚀 MyApp 启动中...';
-  Color _bg = Colors.blue;
+/// 全局错误边界
+///
+/// 捕获 build/layout 阶段的异常，显示红色错误页面而非纯白屏。
+/// 配合 builder 参数使用：MaterialApp(builder: (ctx, child) => _ErrorBoundary(child: child))
+class _ErrorBoundary extends StatelessWidget {
+  final Widget? child;
+
+  const _ErrorBoundary({super.key, this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return FlutterError.onError != null
+        ? _ErrorBoundaryWidget(child: child)
+        : (child ?? const SizedBox.shrink());
+  }
+}
+
+class _ErrorBoundaryWidget extends StatefulWidget {
+  final Widget? child;
+  const _ErrorBoundaryWidget({super.key, this.child});
+
+  @override
+  State<_ErrorBoundaryWidget> createState() => _ErrorBoundaryWidgetState();
+}
+
+class _ErrorBoundaryWidgetState extends State<_ErrorBoundaryWidget> {
+  void Function(FlutterErrorDetails)? _originalHandler;
 
   @override
   void initState() {
     super.initState();
-    debugPrint('═══════════════════════════════════════');
-    debugPrint('🔵 [_RealAppWithLogs] initState');
-    debugPrint('═══════════════════════════════════════');
-
-    // 延迟 300ms 让首帧先渲染
-    Future.delayed(const Duration(milliseconds: 300), () {
+    _originalHandler = FlutterError.onError;
+    FlutterError.onError = (details) {
+      // 调用原始 handler 保持 Sentry 上报
+      _originalHandler?.call(details);
+      // 同时刷新 UI 显示错误
       if (mounted) {
         setState(() {
-          _phase = '⏳ 正在检查 PrivacyFuseController...';
-          _bg = Colors.cyan;
+          _lastError = '${details.exception}';
+          debugPrint('[ErrorBoundary] ${details.exception}');
+          debugPrint('[ErrorBoundary] ${details.stack}');
         });
       }
-    });
+    };
+  }
+
+  String? _lastError;
+
+  @override
+  void dispose() {
+    // 恢复原始 handler
+    FlutterError.onError = _originalHandler;
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    debugPrint('🟢 [_RealAppWithLogs] build: $_phase');
-
-    return Scaffold(
-      backgroundColor: _bg,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // 标题
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(8)),
-                child: Text(_phase, style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'monospace')),
+    if (_lastError != null) {
+      return Material(
+        color: Colors.red.shade50,
+        child: SafeArea(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '应用遇到错误',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _lastError!,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.red, fontSize: 14),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => setState(() => _lastError = null),
+                    child: const Text('清除错误，继续'),
+                  ),
+                ],
               ),
-
-              const SizedBox(height: 16),
-
-              // 逐步构建，每步显示状态
-              _StepWidget(
-                step: 1,
-                name: 'PrivacyFuseControllerProvider',
-                child: Consumer(
-                  builder: (ctx, ref, _) {
-                    debugPrint('  🔸 Step 1: watch privacyFuseControllerProvider');
-                    final asyncCtrl = ref.watch(privacyFuseControllerProvider);
-                    return asyncCtrl.when(
-                      loading: () => _StepStatus(1, 'PrivacyFuseController', '⏳ 加载中...', Colors.orange),
-                      error: (e, s) {
-                        debugPrint('  ❌ Step 1 失败: $e');
-                        return _StepStatus(1, 'PrivacyFuseController', '❌ 失败: $e', Colors.red, details: s.toString());
-                      },
-                      data: (ctrl) {
-                        debugPrint('  ✅ Step 1 完成: ${ctrl.initStatus}');
-                        return _StepStatus(1, 'PrivacyFuseController', '✅ 完成 (${ctrl.initStatus})', Colors.green);
-                      },
-                    );
-                  },
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              _StepWidget(
-                step: 2,
-                name: 'EmptyStatePage',
-                child: _EmptyStatePageTest(),
-              ),
-
-              const SizedBox(height: 16),
-
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                child: const Text(
-                  '📍 请查看 Logcat 日志\n'
-                  '搜索关键词: [v5] 或 flutter\n\n'
-                  '如果卡在某一步 → 该步的日志会停在 "⏳"\n'
-                  '如果报错 → 会显示 "❌"',
-                  style: TextStyle(color: Colors.white70, fontSize: 12),
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// EmptyStatePage 测试（逐步调用原始方法 + 日志）
-class _EmptyStatePageTest extends StatefulWidget {
-  @override
-  State<_EmptyStatePageTest> createState() => _EmptyStatePageTestState();
-}
-
-class _EmptyStatePageTestState extends State<_EmptyStatePageTest> {
-  String _status = '⏳ 等待启动...';
-  Color _color = Colors.orange;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    debugPrint('  🔵 [EmptyStatePageTest] initState');
-    _startTest();
-  }
-
-  Future<void> _startTest() async {
-    try {
-      debugPrint('  🟡 [EmptyStatePageTest] 开始测试...');
-
-      // Step 1: 模拟 EmptyStatePage 的权限检测
-      setState(() => _status = '⏳ Step 2.1: 检查定位权限...');
-
-      // 注意：这里不调用真实的 Geolocator，因为那会触发平台通道
-      // 我们只是测试 UI 渲染是否正常
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      debugPrint('  ✅ [EmptyStatePageTest] Step 2.1 完成');
-      setState(() => _status = '✅ Step 2.1 完成');
-
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // Step 2: 模拟定位服务检测
-      setState(() => _status = '⏳ Step 2.2: 检查定位服务...');
-      await Future.delayed(const Duration(milliseconds: 500));
-
-      debugPrint('  ✅ [EmptyStatePageTest] Step 2.2 完成');
-      setState(() => _status = '✅ Step 2.2 完成');
-
-      await Future.delayed(const Duration(milliseconds: 300));
-
-      // Step 3: 完成
-      debugPrint('  ✅ [EmptyStatePageTest] 全部完成');
-      setState(() {
-        _status = '✅ EmptyStatePage 逻辑正常';
-        _color = Colors.green;
-      });
-    } catch (e, s) {
-      debugPrint('  ❌ [EmptyStatePageTest] 失败: $e');
-      setState(() {
-        _status = '❌ 失败: $e';
-        _color = Colors.red;
-        _error = s.toString();
-      });
+      );
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: _color.withOpacity(0.3), borderRadius: BorderRadius.circular(8), border: Border.all(color: _color)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Step 2: EmptyStatePage', style: TextStyle(color: _color, fontSize: 14, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(_status, style: const TextStyle(color: Colors.white, fontSize: 12, fontFamily: 'monospace')),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(_error!, style: const TextStyle(color: Colors.redAccent, fontSize: 10, fontFamily: 'monospace')),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// 步骤包装器
-class _StepWidget extends StatelessWidget {
-  final int step;
-  final String name;
-  final Widget child;
-
-  const _StepWidget({required this.step, required this.name, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Step $step: $name', style: const TextStyle(color: Colors.white70, fontSize: 13)),
-        const SizedBox(height: 4),
-        child,
-      ],
-    );
-  }
-}
-
-/// 步骤状态
-class _StepStatus extends StatelessWidget {
-  final int step;
-  final String name;
-  final String status;
-  final Color color;
-  final String? details;
-
-  const _StepStatus(this.step, this.name, this.status, this.color, {this.details});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: color.withOpacity(0.3), borderRadius: BorderRadius.circular(8), border: Border.all(color: color)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(status, style: TextStyle(color: color, fontSize: 14, fontFamily: 'monospace')),
-          if (details != null) ...[
-            const SizedBox(height: 8),
-            Text(details!.split('\n').take(5).join('\n'), style: const TextStyle(color: Colors.orangeAccent, fontSize: 10, fontFamily: 'monospace')),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// 加载界面
-class _LoadingScreen extends StatelessWidget {
-  final String status;
-  final List<String> logs;
-
-  const _LoadingScreen({required this.status, required this.logs});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.blue,
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Text(status, style: const TextStyle(color: Colors.white, fontSize: 18)),
-              const SizedBox(height: 16),
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                  padding: const EdgeInsets.all(10),
-                  child: ListView.builder(
-                    itemCount: logs.length,
-                    itemBuilder: (_, i) {
-                      final log = logs[i];
-                      Color c = Colors.white70;
-                      if (log.startsWith('✅')) c = Colors.greenAccent;
-                      if (log.startsWith('❌')) c = Colors.redAccent;
-                      if (log.startsWith('⚠️')) c = Colors.yellowAccent;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: Text(log, style: TextStyle(color: c, fontSize: 12, fontFamily: 'monospace')),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 错误界面
-class _ErrorScreen extends StatelessWidget {
-  final String error;
-  final List<String> logs;
-
-  const _ErrorScreen({required this.error, required this.logs});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: Colors.purple,
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('❌ 初始化失败', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                child: SelectableText(error, style: const TextStyle(color: Colors.redAccent, fontFamily: 'monospace', fontSize: 14)),
-              ),
-              if (logs.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Text('日志:', style: TextStyle(color: Colors.white70, fontSize: 14)),
-                const SizedBox(height: 8),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: logs.map((l) {
-                      Color c = Colors.white70;
-                      if (l.startsWith('✅')) c = Colors.greenAccent;
-                      if (l.startsWith('❌')) c = Colors.redAccent;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 1),
-                        child: Text(l, style: TextStyle(color: c, fontSize: 11, fontFamily: 'monospace')),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
+    return widget.child ?? const SizedBox.shrink();
   }
 }
