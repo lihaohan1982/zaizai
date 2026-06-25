@@ -195,9 +195,9 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    // 色块隔离③：EmptyStatePage 层（蓝色半透明）
+    // 色块隔离③：EmptyStatePage 层（蓝色不透明）
     return ColoredBox(
-      color: const Color(0x662196F3), // 蓝色半透明
+      color: const Color(0xFF2196F3), // 蓝色不透明
       child: Scaffold(
         body: SafeArea(
           child: Padding(

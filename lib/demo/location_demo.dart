@@ -103,9 +103,9 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
     final fencesAsync = ref.watch(fencesProvider);
     final privacyAsync = ref.watch(privacyFuseControllerProvider);
 
-    // 色块隔离⑤：LocationDemoPage 层（橙色半透明）
+    // 色块隔离⑤：LocationDemoPage 层（橙色不透明）
     return ColoredBox(
-      color: const Color(0x66FF9800), // 橙色半透明
+      color: const Color(0xFFFF9800), // 橙色不透明
       child: Scaffold(
       appBar: AppBar(
         title: Text(DEBUG_FAKE_POSITION ? '[调试] 假GPS' : '定位陪伴'),

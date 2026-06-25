@@ -137,9 +137,9 @@ class _MyAppState extends ConsumerState<MyApp> {
       home: _buildRootPage(),
       // 捕获所有未处理的 Flutter 异常，显示错误页面而非纯白
       builder: (context, child) {
-        // 色块隔离①：ErrorBoundary 层（黄色半透明）
+        // 色块隔离①：ErrorBoundary 层（黄色不透明）
         return ColoredBox(
-          color: const Color(0x66FFEB3B), // 黄色半透明
+          color: const Color(0xFFFFEB3B), // 黄色不透明
           child: _ErrorBoundary(child: child),
         );
       },
@@ -147,9 +147,9 @@ class _MyAppState extends ConsumerState<MyApp> {
   }
 
   Widget _buildRootPage() {
-    // 色块隔离②：Root 页面层（绿色半透明）
+    // 色块隔离②：Root 页面层（绿色不透明）
     return ColoredBox(
-      color: const Color(0x664CAF50), // 绿色半透明
+      color: const Color(0xFF4CAF50), // 绿色不透明
       child: _buildRootPageContent(),
     );
   }
@@ -244,9 +244,9 @@ class _InitializationRouter extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final privacyAsync = ref.watch(privacyFuseControllerProvider);
 
-    // 色块隔离④：_InitializationRouter 层（紫色半透明）
+    // 色块隔离④：_InitializationRouter 层（紫色不透明）
     return ColoredBox(
-      color: const Color(0x669C27B0), // 紫色半透明
+      color: const Color(0xFF9C27B0), // 紫色不透明
       child: privacyAsync.when(
       loading: () => const Scaffold(
         body: Center(child: CircularProgressIndicator()),
