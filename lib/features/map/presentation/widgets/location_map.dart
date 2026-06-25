@@ -138,10 +138,9 @@ class _LocationMapState extends State<LocationMap>
             initialZoom: 13,
           ),
           children: [
-            // OSM 官方 CDN，a/b/c 子域轮询（符合 OSM 使用政策）
+            // OSM 德国镜像（国内可访问）
             TileLayer(
-              urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-              subdomains: const ['a', 'b', 'c'],
+              urlTemplate: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
               userAgentPackageName: 'com.locationchat.location_chat_app',
               tileProvider: NetworkTileProvider(
                 headers: {

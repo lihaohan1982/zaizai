@@ -26,8 +26,9 @@ import '../features/fence/presentation/create_geofence_sheet.dart';
 // ignore: constant_identifier_names
 const bool DEBUG_FAKE_POSITION = false;
 
-/// OSM 官方 CDN 瓦片地址（a/b/c 三个子域轮询，符合使用政策）
-const String _osmTileUrl = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+/// OSM 德国镜像（国内可访问，避免 GFW 拦截）
+/// 原官方 CDN tile.openstreetmap.org 在中国大陆被墙
+const String _osmTileUrl = 'https://tile.openstreetmap.de/{z}/{x}/{y}.png';
 
 /// OSM 请求 User-Agent（OSM 使用政策要求标明应用身份）
 const Map<String, String> _osmHeaders = {
