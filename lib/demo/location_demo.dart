@@ -122,11 +122,27 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Stack(
+      body: Column(
         children: [
-          Positioned.fill(
-            child: _buildMap(positionAsync, fencesAsync, privacyAsync),
+          // 诊断条：如果看不到这个红色条，说明布局尺寸为0
+          Container(
+            width: double.infinity,
+            height: 60,
+            color: Colors.red,
+            child: const Center(
+              child: Text(
+                '布局诊断：能看到红色说明布局有尺寸',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
+          // 地图区域
+          Expanded(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: _buildMap(positionAsync, fencesAsync, privacyAsync),
+                ),
           SideDrawer(
             isOpen: _drawerOpen,
             onClose: _drawerOpen ? _closeDrawer : () {},
@@ -167,9 +183,12 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
     AsyncValue<List<Map<String, dynamic>>> fencesAsync,
     AsyncValue<PrivacyFuseController> privacyAsync,
   ) {
-    return positionAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
-      error: (err, _) => Center(
+    // 诊断1：整个地图区域包裹蓝色容器，如果看不到蓝色说明布局尺寸为0
+    return ColoredBox(
+      color: Colors.blue,
+      child: positionAsync.when(
+        loading: () => const Center(child: CircularProgressIndicator()),
+        error: (err, _) => Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
