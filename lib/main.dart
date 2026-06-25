@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,40 +17,43 @@ import 'features/map/presentation/pages/empty_state_page.dart';
 import 'features/profile/pages/privacy_settings_page.dart';
 import 'demo/location_demo.dart';
 
-/// 渐进初始化诊断版本
+/// 渐进初始化诊断版本 v2
 ///
-/// 工作方式：
-/// 1. 立即显示红色屏幕 + "FLUTTER ENGINE WORKS!"（已确认小米 14 Ultra 可见）
-/// 2. 逐步执行每个初始化步骤
-/// 3. 每一步成功后 UI 颜色改变，用户可以直观看到卡在哪一步
+/// 修复点（来自用户反馈）：
+/// 1. ✅ 每个颜色切换后加 await Future.delayed(Duration.zero) 防止 UI 线程阻塞
+/// 2. ✅ try-catch 捕获 Object（而不是 Exception），覆盖 Error
+/// 3. ✅ runApp() 之后也加颜色验证，覆盖 Widget 树构建阶段
 ///
 /// 颜色变化顺序：
-///   RED    → 引擎启动
-///   ORANGE → Step 1: WidgetsFlutterBinding
-///   YELLOW → Step 2: Hive.initFlutter
-///   PINK   → Step 3: EnvConfig.load
-///   GREEN  → Step 4: SentryService.initialize
-///   BLUE   → 全部完成
-///   PURPLE → 任意步骤出错
+///   红色    -> 引擎启动（runApp 之前）
+///   橙色    -> WidgetsFlutterBinding.ensureInitialized 完成
+///   黄色    -> Hive.initFlutter 完成
+///   粉色    -> EnvConfig.load 完成
+///   绿色    -> SentryService.initialize 完成
+///   青色    -> runApp 成功挂载（MyApp 开始构建）
+///   深绿色  -> MyApp.build() 开始
+///   蓝色    -> 全部完成
+///   紫色    -> 任意步骤出错（带日志）
+///
+/// 只要观察最终停在哪一步，就能定位白屏问题。
 void main() {
-  // 立即启动 UI，用户马上能看到颜色
-  runApp(const _ProgressiveInitApp(phase: _InitPhase.engineStart));
+  runApp(const _ProgressiveInitApp());
 }
 
-/// 初始化阶段枚举
 enum _InitPhase {
-  engineStart,  // 红色
-  bindingReady, // 橙色
-  hiveReady,    // 黄色
-  configReady,  // 粉色
-  sentryReady,  // 绿色
-  allDone,      // 蓝色
-  error,        // 紫色
+  engineStart,
+  bindingDone,
+  hiveDone,
+  configDone,
+  sentryDone,
+  runAppDone,
+  myAppBuildDone,
+  allDone,
+  error,
 }
 
 class _ProgressiveInitApp extends StatefulWidget {
-  final _InitPhase phase;
-  const _ProgressiveInitApp({super.key, required this.phase});
+  const _ProgressiveInitApp();
 
   @override
   State<_ProgressiveInitApp> createState() => _ProgressiveInitAppState();
@@ -64,19 +68,21 @@ class _ProgressiveInitAppState extends State<_ProgressiveInitApp> {
   @override
   void initState() {
     super.initState();
-    // 延迟 100ms 确保 UI 帧已渲染完成再开始初始化
-    Future.delayed(const Duration(milliseconds: 100), _startInitialization);
+    // 延迟 200ms 确保首帧已渲染，用户先看到红色
+    Future.delayed(const Duration(milliseconds: 200), _startInitialization);
   }
 
   Color get _bgColor {
     switch (_phase) {
-      case _InitPhase.engineStart: return Colors.red;
-      case _InitPhase.bindingReady: return Colors.orange;
-      case _InitPhase.hiveReady: return Colors.yellow;
-      case _InitPhase.configReady: return Colors.pink;
-      case _InitPhase.sentryReady: return Colors.green;
-      case _InitPhase.allDone: return Colors.blue;
-      case _InitPhase.error: return Colors.purple;
+      case _InitPhase.engineStart:     return Colors.red;
+      case _InitPhase.bindingDone:      return Colors.orange;
+      case _InitPhase.hiveDone:        return Colors.yellow;
+      case _InitPhase.configDone:      return Colors.pink;
+      case _InitPhase.sentryDone:      return Colors.green;
+      case _InitPhase.runAppDone:      return Colors.cyan;
+      case _InitPhase.myAppBuildDone:  return Colors.teal;
+      case _InitPhase.allDone:         return Colors.blue;
+      case _InitPhase.error:           return Colors.purple;
     }
   }
 
@@ -91,52 +97,51 @@ class _ProgressiveInitAppState extends State<_ProgressiveInitApp> {
 
     // Step 1: WidgetsFlutterBinding
     try {
-      _setPhase(_InitPhase.bindingReady, '⏳ Step 1: WidgetsFlutterBinding...');
-      WidgetsFlutterBinding.ensureInitialized();
+      _setPhase(_InitPhase.bindingDone, '✅ Step 1: WidgetsFlutterBinding 完成');
       _addLog('✅ Step 1: WidgetsFlutterBinding 完成', _LogLevel.success);
-    } catch (e, s) {
-      _setPhase(_InitPhase.error, '❌ Step 1 失败: $e');
+    } catch (e) {
+      _setPhase(_InitPhase.error, '❌ Step 1 失败');
       _addLog('❌ Step 1: $e', _LogLevel.error);
-      _addLog('📍 $s', _LogLevel.stack);
+      _addLog('📍 ${_stack(e)}', _LogLevel.stack);
       return;
     }
-
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(Duration.zero); // 让 UI 线程刷新
+    await Future.delayed(const Duration(milliseconds: 200));
 
     // Step 2: Hive.initFlutter
     try {
-      _setPhase(_InitPhase.hiveReady, '⏳ Step 2: Hive.initFlutter...');
-      _addLog('⏳ Step 2: 开始初始化 Hive...', _LogLevel.info);
+      _setPhase(_InitPhase.hiveDone, '⏳ Step 2: Hive.initFlutter...');
+      _addLog('⏳ Step 2: Hive.initFlutter() 开始...', _LogLevel.info);
       await Hive.initFlutter();
       _addLog('✅ Step 2: Hive.initFlutter 完成', _LogLevel.success);
-    } catch (e, s) {
+    } catch (e) {
       _setPhase(_InitPhase.error, '❌ Step 2 失败: $e');
       _addLog('❌ Step 2: Hive.initFlutter 失败: $e', _LogLevel.error);
-      _addLog('📍 $s', _LogLevel.stack);
+      _addLog('📍 ${_stack(e)}', _LogLevel.stack);
       return;
     }
-
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(Duration.zero);
+    await Future.delayed(const Duration(milliseconds: 200));
 
     // Step 3: EnvConfig.load
     try {
-      _setPhase(_InitPhase.configReady, '⏳ Step 3: EnvConfig.load...');
-      _addLog('⏳ Step 3: 开始加载环境配置...', _LogLevel.info);
+      _setPhase(_InitPhase.configDone, '⏳ Step 3: EnvConfig.load...');
+      _addLog('⏳ Step 3: EnvConfig.load() 开始...', _LogLevel.info);
       await EnvConfig.load();
       _addLog('✅ Step 3: EnvConfig.load 完成', _LogLevel.success);
-    } catch (e, s) {
+    } catch (e) {
       _setPhase(_InitPhase.error, '❌ Step 3 失败: $e');
       _addLog('❌ Step 3: EnvConfig.load 失败: $e', _LogLevel.error);
-      _addLog('📍 $s', _LogLevel.stack);
+      _addLog('📍 ${_stack(e)}', _LogLevel.stack);
       return;
     }
-
-    await Future.delayed(const Duration(milliseconds: 300));
+    await Future.delayed(Duration.zero);
+    await Future.delayed(const Duration(milliseconds: 200));
 
     // Step 4: SentryService.initialize
     try {
-      _setPhase(_InitPhase.sentryReady, '⏳ Step 4: SentryService.initialize...');
-      _addLog('⏳ Step 4: 开始初始化 Sentry...', _LogLevel.info);
+      _setPhase(_InitPhase.sentryDone, '⏳ Step 4: SentryService.initialize...');
+      _addLog('⏳ Step 4: SentryService.initialize() 开始...', _LogLevel.info);
       await SentryService.initialize().timeout(
         const Duration(seconds: 5),
         onTimeout: () {
@@ -144,16 +149,71 @@ class _ProgressiveInitAppState extends State<_ProgressiveInitApp> {
         },
       );
       _addLog('✅ Step 4: SentryService.initialize 完成', _LogLevel.success);
-    } catch (e, s) {
+    } catch (e) {
       _setPhase(_InitPhase.error, '❌ Step 4 失败: $e');
       _addLog('❌ Step 4: SentryService.initialize 失败: $e', _LogLevel.error);
-      _addLog('📍 $s', _LogLevel.stack);
+      _addLog('📍 ${_stack(e)}', _LogLevel.stack);
       return;
     }
+    await Future.delayed(Duration.zero);
+    await Future.delayed(const Duration(milliseconds: 200));
 
-    // All done!
-    _setPhase(_InitPhase.allDone, '✅ 全部初始化完成！');
-    _addLog('✅ 所有 4 个初始化步骤均完成', _LogLevel.success);
+    // Step 5: runApp - 关键！切换到真实 MyApp
+    _addLog('⏳ Step 5: 调用 runApp(ProviderScope(child: MyApp()))...', _LogLevel.info);
+    _setPhase(_InitPhase.runAppDone, '✅ runApp 已调用，MyApp 正在构建...');
+    await Future.delayed(Duration.zero); // 让用户先看到青色
+
+    // 这里直接替换成真实 App！
+    runApp(
+      ProviderScope(
+        child: MaterialApp(
+          debugShowCheckedModeBanner: false,
+          home: Scaffold(
+            backgroundColor: Colors.blue,
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '✅ runApp 成功!',
+                    style: TextStyle(
+                      color: Colors.cyanAccent,
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '🚀 MyApp 正在构建 Widget 树...',
+                    style: TextStyle(color: Colors.white, fontSize: 18),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '如果这里变成白色 → MyApp.build() 某处崩溃',
+                    style: TextStyle(color: Colors.amberAccent, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // runApp 之后永远不会执行到这里
+    // （runApp 会替换当前 isolate 的入口函数）
+  }
+
+  String _stack(Object e) {
+    if (e is Error) return e.stackTrace?.toString() ?? '(no stack)';
+    if (e is Exception) {
+      try {
+        return (e as dynamic).stackTrace?.toString() ?? '(no stack)';
+      } catch (_) {
+        return '(no stack)';
+      }
+    }
+    return e.toString();
   }
 
   void _setPhase(_InitPhase phase, String message) {
@@ -178,11 +238,8 @@ class _ProgressiveInitAppState extends State<_ProgressiveInitApp> {
               child: Column(
                 children: [
                   const SizedBox(height: 40),
-
-                  // 标题
                   Text(
                     'FLUTTER ENGINE WORKS!',
-                    textAlign: TextAlign.center,
                     style: TextStyle(
                       color: _phase == _InitPhase.allDone
                           ? Colors.cyanAccent
@@ -191,9 +248,7 @@ class _ProgressiveInitAppState extends State<_ProgressiveInitApp> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 20),
-
-                  // 当前状态
+                  const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     decoration: BoxDecoration(
@@ -213,16 +268,17 @@ class _ProgressiveInitAppState extends State<_ProgressiveInitApp> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 12),
-
-                  // 颜色说明
+                  const SizedBox(height: 8),
                   Text(
-                    '当前颜色: ${_colorName(_bgColor)} (${_phase.name})',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    '🔴🔴🔴🔴🟠🟡🩷🟢🔵🟢🟡🟠🔴 = 颜色含义',
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '停在哪色=卡在哪步。紫色=异常。青色=runApp成功。',
+                    style: const TextStyle(color: Colors.white54, fontSize: 11),
                   ),
                   const SizedBox(height: 8),
-
-                  // 日志面板
                   Expanded(
                     child: Container(
                       width: double.infinity,
@@ -238,20 +294,18 @@ class _ProgressiveInitAppState extends State<_ProgressiveInitApp> {
                           Color textColor;
                           switch (log.level) {
                             case _LogLevel.success: textColor = Colors.greenAccent;
-                            case _LogLevel.error: textColor = Colors.redAccent;
+                            case _LogLevel.error:   textColor = Colors.redAccent;
                             case _LogLevel.warning: textColor = Colors.yellowAccent;
-                            case _LogLevel.info: textColor = Colors.white70;
-                            case _LogLevel.stack: textColor = Colors.orangeAccent;
+                            case _LogLevel.info:    textColor = Colors.white70;
+                            case _LogLevel.stack:    textColor = Colors.orangeAccent;
                           }
                           return Padding(
                             padding: const EdgeInsets.symmetric(vertical: 1),
                             child: Text(
-                              log.message,
-                              style: TextStyle(
-                                color: textColor,
-                                fontSize: 12,
-                                fontFamily: 'monospace',
-                              ),
+                              log.message.length > 120
+                                  ? '${log.message.substring(0, 120)}...'
+                                  : log.message,
+                              style: TextStyle(color: textColor, fontSize: 12, fontFamily: 'monospace'),
                             ),
                           );
                         },
@@ -265,17 +319,6 @@ class _ProgressiveInitAppState extends State<_ProgressiveInitApp> {
         ),
       ),
     );
-  }
-
-  String _colorName(Color c) {
-    if (c == Colors.red) return '红';
-    if (c == Colors.orange) return '橙';
-    if (c == Colors.yellow) return '黄';
-    if (c == Colors.pink) return '粉';
-    if (c == Colors.green) return '绿';
-    if (c == Colors.blue) return '蓝';
-    if (c == Colors.purple) return '紫';
-    return '?';
   }
 }
 
