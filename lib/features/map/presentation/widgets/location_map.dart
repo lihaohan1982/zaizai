@@ -1,6 +1,6 @@
 // lib/features/map/presentation/widgets/location_map.dart
 // 高德地图瓦片 + 围栏渲染 + 闪烁动画 + 隐私暂停遮罩
-// 瓦片源：webrd01.is.autonavi.com（国内直连，无需 API Key）
+// 底图 GCJ-02 → 所有坐标统一转换
 
 import 'dart:math' as math;
 import 'dart:ui';
@@ -8,6 +8,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:location_chat_app/core/map/map_config.dart';
 import 'package:location_chat_app/core/privacy/privacy_fuse_controller.dart';
 
 /// 使用高德地图渲染围栏，支持触发闪烁动画
@@ -31,8 +32,6 @@ class _LocationMapState extends State<LocationMap>
     with SingleTickerProviderStateMixin {
   late AnimationController _blinkController;
   late VoidCallback _statusListener;
-
-  // 地图控制器（用于后续动态更新）
   final MapController _mapController = MapController();
 
   bool get _isPaused =>
@@ -42,7 +41,6 @@ class _LocationMapState extends State<LocationMap>
   @override
   void initState() {
     super.initState();
-
     _blinkController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
@@ -53,7 +51,6 @@ class _LocationMapState extends State<LocationMap>
         if (mounted) _blinkController.stop();
       });
     }
-
     _statusListener = () {
       if (mounted) setState(() {});
     };
@@ -68,15 +65,20 @@ class _LocationMapState extends State<LocationMap>
     super.dispose();
   }
 
-  /// 使用多边形近似绘制圆形围栏
+  /// 将围栏坐标从 WGS-84 转换为 GCJ-02（底图同源）
   List<LatLng> _generateCirclePoints(
-    LatLng center,
+    LatLng centerWgs84,
     double radius, [
     int points = 32,
   ]) {
+    // 底图是 GCJ-02，先将圆心从 WGS-84 转换到 GCJ-02
+    final center = GcjConverter.wgs84ToGcj02(
+        centerWgs84.latitude, centerWgs84.longitude);
+
     const latDegPerMeter = 1.0 / 111320.0;
     final cosLat = math.cos(center.latitude * math.pi / 180.0);
-    final lonDegPerMeter = latDegPerMeter / (cosLat.abs() < 1e-10 ? 1e-10 : cosLat);
+    final lonDegPerMeter = latDegPerMeter /
+        (cosLat.abs() < 1e-10 ? 1e-10 : cosLat);
 
     return List.generate(points, (i) {
       final angle = 2 * math.pi * i / points;
@@ -121,25 +123,17 @@ class _LocationMapState extends State<LocationMap>
       children: [
         FlutterMap(
           mapController: _mapController,
-          options: const MapOptions(
-            initialCenter: LatLng(39.909187, 116.397451), // 北京天安门
+          options: MapOptions(
+            // 底图 GCJ-02，初始中心点也需转换
+            initialCenter:
+                GcjConverter.wgs84ToGcj02(39.909187, 116.397451),
             initialZoom: 13,
           ),
           children: [
-            // 高德矢量图：国内秒开，无 GFW 拦截，无需 API Key
-            TileLayer(
-              urlTemplate:
-                  'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-              userAgentPackageName: 'com.locationchat.location_chat_app',
-              tileProvider: NetworkTileProvider(),
-              // 兜底：加载失败时显示透明占位图，避免红屏
-              errorImage: const AssetImage('assets/images/transparent.png'),
-              // 兜底：捕获错误并打印日志，不中断 UI
-              errorTileCallback: (tile, error, stackTrace) {
-                debugPrint('⚠️ 地图瓦片加载失败: ${tile.coordinates} — $error');
-              },
-            ),
-            // 围栏多边形
+            // 工业级高德瓦片（含透明占位 + 错误兜底）
+            MapLayerFactory.createAmapLayer(),
+
+            // 围栏多边形（坐标已转换为 GCJ-02）
             PolygonLayer(polygons: polygons.toList()),
           ],
         ),
@@ -152,7 +146,8 @@ class _LocationMapState extends State<LocationMap>
             child: Icon(Icons.account_circle, size: 40, color: Colors.red),
           ),
 
-        // 自身位置 Marker（始终显示）
+        // 自身位置 Marker（始终显示，坐标需转换为 GCJ-02）
+        // 注意：此 Widget 的坐标由上层调用方转换后传入
         const Positioned(
           bottom: 100,
           left: 16,

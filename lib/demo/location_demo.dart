@@ -20,15 +20,12 @@ import '../features/chat/widgets/side_drawer_content.dart';
 import '../features/map/presentation/widgets/geofence_status_indicator.dart';
 import '../features/map/presentation/widgets/location_map.dart';
 import '../features/fence/presentation/create_geofence_sheet.dart';
+import '../core/map/map_config.dart';
 
 /// 调试开关：true = 强制假GPS（北京天安门），false = 真实 GPS
 /// 正式发布前请改为 false
 // ignore: constant_identifier_names
 const bool DEBUG_FAKE_POSITION = false;
-
-/// 高德地图瓦片（国内直连，无 GFW 拦截，无需 API Key）
-/// OSM 服务（org / de）在国内均不可达，已切到高德 raster tiles
-const String _osmTileUrl = 'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}';
 
 /// 假GPS数据流（仅在 DEBUG_FAKE_POSITION=true 时使用）
 Stream<Position> _fakePositionStream() {
@@ -203,11 +200,12 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
         _currentLat = lat;
         _currentLng = lon;
 
-        // 第一次收到 GPS 数据时将地图移到当前位置
+        // 第一次收到 GPS 数据时将地图移到当前位置（WGS-84 → GCJ-02）
         if (!_mapInitialized) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) {
-              _mapController.move(LatLng(lat, lon), 15);
+              final gcj = GcjConverter.wgs84ToGcj02(lat, lon);
+              _mapController.move(gcj, 15);
               _mapInitialized = true;
             }
           });
@@ -216,26 +214,20 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
         final fences = fencesAsync.valueOrNull ?? [];
         final controller = privacyAsync.valueOrNull;
 
-        // PrivacyFuseController 尚未就绪：渲染只有 OSM 底图的轻量版地图，
+        // PrivacyFuseController 尚未就绪：渲染只有高德底图的轻量版地图，
         // 等 controller 就绪后自动切换为完整的 LocationMap
         if (controller == null) {
+          // WGS-84 → GCJ-02 转换底图同源
+          final gcjCenter = GcjConverter.wgs84ToGcj02(lat, lon);
           return FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: LatLng(lat, lon),
+              initialCenter: gcjCenter,
               initialZoom: 15,
             ),
             children: [
-              TileLayer(
-                urlTemplate: _osmTileUrl,
-                userAgentPackageName: 'com.locationchat.location_chat_app',
-                tileProvider: NetworkTileProvider(),
-                // 兜底：加载失败显示透明占位图，不红屏
-                errorImage: const AssetImage('assets/images/transparent.png'),
-                errorTileCallback: (tile, error, stackTrace) {
-                  debugPrint('⚠️ 地图瓦片加载失败: ${tile.coordinates} — $error');
-                },
-              ),
+              // 工业级高德瓦片（含透明占位 + 错误兜底）
+              MapLayerFactory.createAmapLayer(),
             ],
           );
         }
