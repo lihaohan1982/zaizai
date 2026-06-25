@@ -104,10 +104,15 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
     final privacyAsync = ref.watch(privacyFuseControllerProvider);
 
     // 色块隔离⑤：LocationDemoPage 层（橙色不透明）
+    // 注意：Scaffold 默认 body 是白色，会遮住 ColoredBox。
+    // 显式设 backgroundColor=Colors.transparent 让橙色透出来。
     return ColoredBox(
-      color: const Color(0xFFFF9800), // 橙色不透明
+      color: const Color(0xFFFF9800), // 橙色不透明 — 必须透到 Scaffold 之外
       child: Scaffold(
+      backgroundColor: Colors.transparent, // 重要：让橙色 ColoredBox 透出来
       appBar: AppBar(
+        backgroundColor: Colors.transparent, // AppBar 也透明
+        elevation: 0, // 无阴影
         title: Text(DEBUG_FAKE_POSITION ? '[调试] 假GPS' : '定位陪伴'),
         actions: [
           _SystemTimeButton(),
@@ -168,7 +173,10 @@ class _LocationDemoPageState extends ConsumerState<LocationDemoPage> {
     AsyncValue<PrivacyFuseController> privacyAsync,
   ) {
     return positionAsync.when(
-      loading: () => const Center(child: CircularProgressIndicator()),
+      loading: () => ColoredBox(
+        color: Colors.orange.shade100, // 浅橙色背景 + 白色加载动画
+        child: const Center(child: CircularProgressIndicator()),
+      ),
       error: (err, _) => Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
