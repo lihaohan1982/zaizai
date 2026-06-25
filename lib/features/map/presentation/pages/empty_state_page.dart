@@ -195,13 +195,16 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 40),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+    // 色块隔离③：EmptyStatePage 层（蓝色半透明）
+    return ColoredBox(
+      color: const Color(0x662196F3), // 蓝色半透明
+      child: Scaffold(
+        body: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
               // 动画图标
               _buildIcon(theme),
               const SizedBox(height: 40),
@@ -266,6 +269,7 @@ class _EmptyStatePageState extends ConsumerState<EmptyStatePage>
           ),
         ),
       ),
+      ), // ColoredBox 结束
     );
   }
 
