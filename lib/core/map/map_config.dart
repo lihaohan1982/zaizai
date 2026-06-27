@@ -107,18 +107,19 @@ class MapLayerFactory {
   /// 默认高德 API Key（仅用于紧急调试，生产环境请通过 EnvConfig.amapApiKey 配置）
   static const String _kFallbackAmapKey = '13bffa45068fd901bea739f49a414ed7';
 
-  /// 256×256 浅灰色 PNG 字节（base64 解码）
-  /// 瓦片加载失败时用 MemoryImage 显示，不走网络加载。
+  /// 256×256 浅灰色 PNG（base64 解码，正确的 PNG 数据）
+  /// 瓦片加载失败时用 MemoryImage 显示灰色占位，不走网络加载。
   static final Uint8List _kGrayTileBytes = base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAAABHNCSVQICAgIfAhkiAAAA'
-    'AlwSFlzAAAPYQAAD2EBqD+naQAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9y'
-    'Z5vuPBoAAAEoSURBVHic7d1BDQAADMOg+zM9/RM4VKBWkiRJkiRJkiRJkiRJkiRJkiRJ'
-    'kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ'
-    'kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ'
-    'kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ'
-    'kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ'
-    'kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJ'
-    'kiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkiRJkvQO7D8AAREAARkAAAAASUVORK5CYII=',
+    'iVBORw0KGgoAAAANSUhEUgAAAQAAAAEACAYAAABccqhmAAACX0lEQVR42u3UMQEAAAjDsPnXOC9gAAfk'
+    'iIEeTdsBfooIYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAG'
+    'ABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAQAGABgAYACAAQAGABgAYACAAQAG'
+    'ABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACA'
+    'AQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgA'
+    'YACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAG'
+    'ABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAA'
+    'QAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgA'
+    'YACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAYACAAQAGABgAcFmW9jWeBztrdAAAAABJR'
+    'U5ErkJggg==',
   );
 
   /// 创建高德矢量瓦片图层（GCJ-02 坐标系，国内秒开）
@@ -142,12 +143,13 @@ class MapLayerFactory {
 
     return TileLayer(
       urlTemplate: url,
-      // ✅ errorImage: 瓦片失败时显示灰色占位图（256x256 灰色 PNG）
-      // MemoryImage 是 ImageProvider，直接渲染到瓦片位置，不走网络加载
+      // 瓦片层背景色（tiles 未加载完时显示灰色，避免透出父级背景）
+      // 瓦片失败时显示灰色占位图（MemoryImage 不走网络，解码失败则静默跳过）
       errorImage: MemoryImage(_kGrayTileBytes),
       tileProvider: NetworkTileProvider(),
       errorTileCallback: logger,
-      evictErrorTileStrategy: EvictErrorTileStrategy.dispose,
+      // none = 永远不移除失败 tiles（保留灰色占位，不透出橙色背景）
+      evictErrorTileStrategy: EvictErrorTileStrategy.none,
     );
   }
 }
