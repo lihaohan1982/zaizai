@@ -10,14 +10,14 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        // Aliyun mirrors - must come BEFORE google() to take effect
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
-        // Fallback to direct
+        // Primary: Google and MavenCentral (most reliable)
         google()
         mavenCentral()
         gradlePluginPortal()
+        // Fallback: Aliyun mirrors (only if primary fails)
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
     }
 }
 
