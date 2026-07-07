@@ -8,7 +8,7 @@ import hashlib
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Query, Header
 from fastapi.middleware.cors import CORSMiddleware
 import aiomysql
 import redis.asyncio as redis
@@ -281,8 +281,21 @@ async def create_geofence(
 
 
 @app.get("/api/geofences")
-async def get_geofences(token: str = Query(...)):
-    user_id = await redis_client.get(f"token:{token}") if redis_client else None
+async def get_geofences(
+    token: Optional[str] = Query(None),
+    authorization: Optional[str] = Header(None, alias="Authorization"),
+):
+    # 支持两种方式：query 参数 token 或 Authorization header
+    actual_token = token
+    if not actual_token and authorization:
+        # 从 "Bearer <token>" 提取 token
+        parts = authorization.split()
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            actual_token = parts[1]
+    if not actual_token:
+        raise HTTPException(status_code=401, detail="缺少认证信息")
+    
+    user_id = await redis_client.get(f"token:{actual_token}") if redis_client else None
     if not user_id:
         raise HTTPException(status_code=401, detail="未授权")
     async with pool.acquire() as conn:

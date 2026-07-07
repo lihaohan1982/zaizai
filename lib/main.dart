@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -48,7 +50,16 @@ void main() async {
       try {
         await EnvConfig.load();
       } catch (e) {
-        debugPrint('[启动] ③ 异常: $e — 使用 fallback 继续启动');
+        debugPrint('[启动] ③ 异常: $e');
+      }
+
+      // ── 探针 ③.5 自动登录（开发环境）──
+      debugPrint('[启动] ③.5 自动登录开始');
+      try {
+        await _ensureLoggedIn();
+        debugPrint('[启动] ③.5 完成');
+      } catch (e) {
+        debugPrint('[启动] ③.5 异常: $e');
       }
       debugPrint('[启动] ③ 完成 (+${DateTime.now().difference(mainStart).inMilliseconds}ms)');
 
@@ -406,5 +417,62 @@ class _ErrorBoundaryWidgetState extends State<_ErrorBoundaryWidget> {
       );
     }
     return widget.child ?? const SizedBox.shrink();
+  }
+}
+
+/// 自动登录函数（开发环境）
+///
+/// 使用测试账号 13800138000/123456 登录，返回已认证的 Dio 实例
+Future<Dio> _ensureLoggedIn() async {
+  final storage = const FlutterSecureStorage();
+  
+  // 检查是否已有 token
+  String? token = await storage.read(key: 'auth_token');
+  if (token != null && token.isNotEmpty) {
+    debugPrint('[自动登录] 已有 token，跳过登录');
+    final dio = Dio(BaseOptions(
+      baseUrl: EnvConfig.apiBaseUrl,
+      headers: {'Authorization': 'Bearer $token'},
+    ));
+    return dio;
+  }
+  
+  // 没有则登录
+  debugPrint('[自动登录] 使用测试账号登录...');
+  final dio = Dio(BaseOptions(baseUrl: EnvConfig.apiBaseUrl));
+  
+  try {
+    final response = await dio.get(
+      '/api/auth/login',
+      queryParameters: {'phone': '13800138000', 'code': '123456'},
+    );
+    
+    final data = response.data as Map<String, dynamic>;
+    if (data['code'] == 0) {
+      final tokenData = data['data'] as Map<String, dynamic>;
+      token = tokenData['token'] as String;
+      final user = tokenData['user'] as Map<String, dynamic>;
+      final userId = user['id'] as String;
+      final nickname = user['nickname'] as String?;
+      
+      await storage.write(key: 'auth_token', value: token);
+      await storage.write(key: 'user_id', value: userId);
+      if (nickname != null) {
+        await storage.write(key: 'nickname', value: nickname);
+      }
+      
+      debugPrint('[自动登录] 登录成功: token=$token, userId=$userId, nickname=$nickname');
+      
+      // 返回带认证的 Dio
+      return Dio(BaseOptions(
+        baseUrl: EnvConfig.apiBaseUrl,
+        headers: {'Authorization': 'Bearer $token'},
+      ));
+    } else {
+      throw Exception('登录失败: ${data['message']}');
+    }
+  } catch (e) {
+    debugPrint('[自动登录] 异常: $e');
+    rethrow;
   }
 }
