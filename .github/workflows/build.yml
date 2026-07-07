@@ -42,9 +42,20 @@ jobs:
       - name: Run tests
         run: flutter test || true
 
-      # 7. 构建 Debug APK
+      # 7. 构建 Debug APK（带重试，保护镜像502或临时故障）
       - name: Build Debug APK
-        run: flutter build apk --debug
+        run: |
+          for i in 1 2 3; do
+            echo "=== Build attempt $i/3 ==="
+            if flutter build apk --debug; then
+              echo "Build succeeded on attempt $i"
+              exit 0
+            fi
+            echo "Build failed on attempt $i, waiting 30s before retry..."
+            sleep 30
+          done
+          echo "All 3 build attempts failed"
+          exit 1
 
       # 8. 上传构建产物 (Artifact)
       - name: Upload APK Artifact
