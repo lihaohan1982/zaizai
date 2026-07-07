@@ -1,9 +1,11 @@
 allprojects {
     repositories {
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
+        // Primary: Google and MavenCentral (most reliable)
         google()
         mavenCentral()
+        // Fallback: Aliyun mirrors (only if primary fails)
+        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        maven { url = uri("https://maven.aliyun.com/repository/public") }
     }
 }
 
